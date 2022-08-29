@@ -154,8 +154,8 @@ impl Mappers {
 }
 
 pub trait Mapper {
-    fn Read(self: &Self, address: u16) -> u8;
-    fn Write(self: &mut Self, address: u16, data: u8) -> ();
+    fn read(self: &Self, address: u16) -> u8;
+    fn write(self: &mut Self, address: u16, data: u8) -> ();
 }
 
 pub struct NROM {
@@ -184,7 +184,7 @@ impl NROM {
 
 impl Mapper for NROM {
 
-    fn Read(self: &Self, address: u16) -> u8 {
+    fn read(self: &Self, address: u16) -> u8 {
         match address >> 13 {
             0 => self.devices.ram.read(address),
             1 => self.devices.ppu.read(address),
@@ -196,7 +196,7 @@ impl Mapper for NROM {
         }
      }
 
-    fn Write(self: &mut Self, address: u16, data: u8) {
+    fn write(self: &mut Self, address: u16, data: u8) {
         match address >> 13 {
             0 => self.devices.ram.write(address, data),
             1 => self.devices.ppu.write(address, data),
