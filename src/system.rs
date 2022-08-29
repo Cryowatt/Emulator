@@ -7,8 +7,6 @@ use crate::bus::MemoryMapper;
 use std::rc::Rc;
 
 use crate::apu::Alu2A03;
-use crate::bus::Bus;
-use crate::bus::BusDevice;
 use crate::ppu::PPU;
 use crate::ram::RAM;
 
@@ -52,7 +50,7 @@ impl ConsoleSystem {
     }
 
     pub fn reset(self: &mut Self) {
-
+        self.cpu.reset(self.mapper.as_mut());
     }
 
     pub fn cycle(self: &mut Self) {

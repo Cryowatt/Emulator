@@ -171,11 +171,14 @@ impl NROM {
         NROM {
             //image,
             devices,
-            program_ram: RAM::<0x2000>::new(image.header.program_ram_size as u16 * 8u16 * 1024u16),
-            program_rom_bank0: ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0x4000),
+            program_ram: match image.header.program_ram_size {
+                0 => RAM::<0x2000>::new(0),
+                _ => RAM::<0x2000>::new((image.header.program_ram_size as u16 * 0x4000) - 1),
+            },
+            program_rom_bank0: ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0x3fff),
             program_rom_bank1: match image.header.program_rom_size {
-                1 => ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0x4000),
-                2 => ROM::<0x4000>::new(&image.program_rom_data[0x4000..0x8000], 0x4000),
+                1 => ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0x3fff),
+                2 => ROM::<0x4000>::new(&image.program_rom_data[0x4000..0x8000], 0x3fff),
                 _ => panic!("More rom than address space, really weird."),
             },
         }
@@ -185,7 +188,7 @@ impl NROM {
 impl Mapper for NROM {
 
     fn read(self: &Self, address: u16) -> u8 {
-        match address >> 13 {
+        let data = match address >> 13 {
             0 => self.devices.ram.read(address),
             1 => self.devices.ppu.read(address),
             2 => self.devices.alu.read(address),
@@ -193,7 +196,10 @@ impl Mapper for NROM {
             // look at https://github.com/Cryowatt/NES/blob/master/NES.CPU/Mappers/Mapper0.cs#L21
             4 | 5 => self.program_rom_bank0.read(address),
             _ => self.program_rom_bank1.read(address),
-        }
+        };
+
+        println!("${:04X} -> {:x}", address, data);
+        data
      }
 
     fn write(self: &mut Self, address: u16, data: u8) {
@@ -206,11 +212,13 @@ impl Mapper for NROM {
             4 | 5 => self.program_rom_bank0.write(address, data),
             _ => self.program_rom_bank1.write(address, data),
         }
+
+        println!("${:04X} <- {:x}", address, data);
     }
 }
 
 pub struct ROM<const SIZE: usize> {
-    pub bank: Box<[u8; SIZE]>,
+    pub bank: Vec<u8>,
     mask: u16,
 }
 
@@ -224,9 +232,8 @@ impl<const SIZE: usize> ROM<SIZE> {
     // }
 
     pub fn new(data: &[u8], mask: u16) -> Self {
-        //let foo = vec![0, SIZE];
         ROM { 
-            bank:  Box::new([0; SIZE]),
+            bank: data.to_owned(),
             mask,
         }
     }
@@ -234,7 +241,7 @@ impl<const SIZE: usize> ROM<SIZE> {
 
 impl<const SIZE: usize> BusDevice for ROM<SIZE> {
     fn read(&self, address: u16) -> u8 {
-        (*self.bank)[address as usize]
+        (*self.bank)[(address & self.mask) as usize]
     }
 
     fn write(self: &mut Self, address: u16, data: u8) {
