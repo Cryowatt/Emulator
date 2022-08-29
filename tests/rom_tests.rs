@@ -16,7 +16,27 @@ fn basics() {
     
     let mut rom_file = File::open("./nes-test-roms/instr_test-v5/rom_singles/01-basics.nes").expect("Test rom open error");
     let image = RomImage::from(&mut rom_file).expect("Test rom load error");
-    let system = ConsoleSystem::new(image);
+    let mut system = ConsoleSystem::new(image);
+    system.reset();
+
+    // Test rom init cycles
+    while system.mapper.read(0x6000) != 0x80 {
+        system.cycle();
+    }
+
+    // Run tests
+    while system.mapper.read(0x6000) == 0x80 {
+        system.cycle();
+    }
+
+    assert_eq!(system.mapper.read(0x6000), 0x00);
+    assert_eq!(system.mapper.read(0x6001), 0xde);
+    assert_eq!(system.mapper.read(0x6002), 0xb0);
+    assert_eq!(system.mapper.read(0x6003), 0x61);
+    
+    // Assert.AreEqual(0xDE, platform.Read(new Address(0x6001)));
+    // Assert.AreEqual(0xB0, platform.Read(new Address(0x6002)));
+    // Assert.AreEqual(0x61, platform.Read(new Address(0x6003)));
     // system.Step();
     //let mut reader = BufReader::new(romFile);    
     

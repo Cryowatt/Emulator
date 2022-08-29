@@ -47,4 +47,12 @@ impl ConsoleSystem {
 
         ConsoleSystem { mapper }
     }
+
+    pub fn reset(self: &mut Self) {
+
+    }
+
+    pub fn cycle(self: &mut Self) {
+        
+    }
 }
