@@ -24,10 +24,10 @@ impl<const SIZE: usize> RAM<SIZE> {
 
 impl<const SIZE: usize> BusDevice for RAM<SIZE> {
     fn read(&self, address: u16) -> u8 {
-        (*self.bank)[address as usize]
+        (*self.bank)[(address & self.mask) as usize]
     }
 
     fn write(self: &mut Self, address: u16, data: u8) {
-        (*self.bank)[address as usize] = data;
+        (*self.bank)[(address & self.mask) as usize] = data;
     }
 }
