@@ -56,6 +56,6 @@ impl ConsoleSystem {
     }
 
     pub fn cycle(self: &mut Self) {
-        self.cpu.cycle();
+        self.cpu.cycle(self.mapper.as_mut());
     }
 }
