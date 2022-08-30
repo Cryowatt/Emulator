@@ -110,7 +110,12 @@ impl Mos6502 {
     }
 
     fn immediate(operation: MicrocodeReadOperation) -> MicrocodeTask {
-        Self::read_pc(operation)
+        let read = |cpu: &mut Mos6502, mapper: &mut dyn Mapper| {
+            let data = mapper.read(cpu.pc);
+            data
+        };
+        
+        MicrocodeTask::Read(read, operation)
     }
 
     // fn push_from_pc_high(self: &mut Self, mapper: &mut dyn Mapper) {
