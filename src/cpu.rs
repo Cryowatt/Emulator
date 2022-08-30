@@ -1,15 +1,32 @@
 use std::{collections::VecDeque};
 
+use bitflags::bitflags;
+
 use crate::roms::Mapper;
 
 type MicrocodeTask = fn(&mut Mos6502, &mut dyn Mapper);
 
 const STACK_OFFSET: u16 = 0x0100;
 
+bitflags! {
+    pub struct Status: u8 {
+        const NONE = 0;
+        const CARRY = 0b00000001;
+        const ZERO = 0b00000010;
+        const INTERRUPT_DISABLE = 0b00000100;
+        const DECIMAL = 0b00001000;
+        const UNDEFINED_5 = 0b00010000;
+        const UNDEFINED_6 = 0b00100000;
+        const OVERFLOW = 0b01000000;
+        const NEGATIVE = 0b10000000;
+        const DEFAULT = 0b00110000;
+    }
+}
+
 pub struct Mos6502 {
     pub a: u8,
     pub pc: u16,
-    pub p: u8,
+    pub p: Status,
     pub s: u8,
     pub x: u8,
     pub y: u8,
@@ -47,7 +64,7 @@ impl Mos6502 {
         Self {
             a: 0x00,
             pc: 0xfffc,
-            p: 0x34,
+            p: Status::DEFAULT,
             s: 0xFD,
             x: 0x00,
             y: 0x00,
@@ -81,7 +98,7 @@ impl Mos6502 {
         // Enqueue(PushStackFromPCH);
         self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.push_from_pc_low(mapper));
         // Enqueue(PushStackFromPCL);
-        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.push_stack(mapper, cpu.p));
+        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.push_stack(mapper, cpu.p.bits));
         // Enqueue(PushStackFromP);
         self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.pc.set_low(mapper.read(0xfffe)));
         // Enqueue(c => c.regs.PC.Low = c.Read(new Address(0xfffe)));
@@ -92,12 +109,16 @@ impl Mos6502 {
         //     c.TraceInstruction("BRK");
         // });
     }
+
+    fn sei(self: &mut Self) {
+        self.p.set(Status::INTERRUPT_DISABLE, true);
+    }
 }
 
 pub trait RP2A03 {
     fn zero_page_indexed();
 
-    fn reset(self: &mut Self, mapper: &mut dyn Mapper);
+    fn reset(self: &mut Self);
 
     fn cycle(self: &mut Self, mapper: &mut dyn Mapper);
 
@@ -120,15 +141,26 @@ impl RP2A03 for Mos6502 {
         let opcode = mapper.read(self.pc);
         self.pc += 1;
 
+        
         match opcode {
-            0 => |cpu, mapper| cpu.brk(),
+            //00/04/08/0c/10/14/18/1c
+            0x00 => |cpu, mapper| cpu.brk(),
+            0x78 => |cpu, mapper| cpu.sei(),
+            //01/05/09/0d/11/15/19/1d
+            //02/06/0a/0e/12/16/1a/1e
+            //03/07/0b/0f/13/17/1b/1f
+
+            //83 =>  |cpu, mapper| cpu.sax(),
+            
             _ => panic!("Unsupported opcode {:x}", opcode),
         }
         
         //todo!();
     }
 
-    fn reset(self: &mut Self, mapper: &mut dyn Mapper) {
-        //todo!()
+    fn reset(self: &mut Self) {
+        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.pc.set_low(mapper.read(0xfffc)));
+        // Enqueue(PushStackFromPCH);
+        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.pc.set_high(mapper.read(0xfffd)));
     }
 }

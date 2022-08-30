@@ -50,7 +50,7 @@ impl ConsoleSystem {
     }
 
     pub fn reset(self: &mut Self) {
-        self.cpu.reset(self.mapper.as_mut());
+        self.cpu.reset();
     }
 
     pub fn cycle(self: &mut Self) {
