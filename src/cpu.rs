@@ -109,6 +109,10 @@ impl Mos6502 {
         MicrocodeTask::Write(write, operation)
     }
 
+    fn immediate(operation: MicrocodeReadOperation) -> MicrocodeTask {
+        Self::read_pc(operation)
+    }
+
     // fn push_from_pc_high(self: &mut Self, mapper: &mut dyn Mapper) {
     //     let data = self.pc.get_high();
     //     self.push_stack(mapper, data);
@@ -132,8 +136,8 @@ impl Mos6502 {
         todo!();
     }
 
-    fn sei(self: &mut Self) {
-        self.queue(Self::read_pc(|cpu, _| cpu.p.set(Status::INTERRUPT_DISABLE, true)));
+    fn sei(cpu: &mut Mos6502, _: u8) {
+        cpu.p.set(Status::INTERRUPT_DISABLE, true);
     }
 }
 
@@ -173,8 +177,8 @@ impl RP2A03 for Mos6502 {
         match opcode {
             //00/04/08/0c/10/14/18/1c
             0x00 => self.brk(),
-            0x4c => self.jmp(),
-            0x78 => self.sei(),
+            //0x4c => self.queue(Self::Absolute(self.jmp())),
+            0x78 => self.queue(Self::immediate(Self::sei)),
             //01/05/09/0d/11/15/19/1d
             //02/06/0a/0e/12/16/1a/1e
             //03/07/0b/0f/13/17/1b/1f
