@@ -39,6 +39,8 @@ pub struct Mos6502 {
     pub x: u8,
     pub y: u8,
 
+    address: u16,
+
     cycle_microcode_queue: VecDeque<MicrocodeTask>,
 }
 
@@ -47,6 +49,7 @@ trait Address {
     fn set_high(&mut self, value: u8);
     fn get_low(&mut self) -> u8;
     fn get_high(&mut self) -> u8;
+    fn from_high_low(high: u8, low: u8) -> u16;
 }
 
 impl Address for u16 {
@@ -65,6 +68,10 @@ impl Address for u16 {
     fn get_high(&mut self) -> u8 {
         (*self >> 8 & 0xff) as u8
     }
+
+    fn from_high_low(high: u8, low: u8) -> u16 {
+        ((high as u16) << 8) | low as u16
+    }
 }
 
 impl Mos6502 {
@@ -77,15 +84,25 @@ impl Mos6502 {
             x: 0x00,
             y: 0x00,
 
+            address: 0x0000,
+
             cycle_microcode_queue: VecDeque::with_capacity(8),
         }
     }
 
-    fn queue(self: &mut Self, task: MicrocodeTask) {
+    fn queue_task(self: &mut Self, task: MicrocodeTask) {
         self.cycle_microcode_queue.push_back(task);
     }
 
-    fn read_pc(operation: MicrocodeReadOperation) -> MicrocodeTask {
+    fn queue_read(self: &mut Self, io_op: BusRead, op: MicrocodeReadOperation) {
+        self.cycle_microcode_queue.push_back(MicrocodeTask::Read(io_op, op));
+    }
+
+    fn queue_write(self: &mut Self, io_op: BusWrite, op: MicrocodeWriteOperation) {
+        self.cycle_microcode_queue.push_back(MicrocodeTask::Write(io_op, op));
+    }
+
+    fn read_pc_op(operation: MicrocodeReadOperation) -> MicrocodeTask {
         let read = |cpu: &mut Mos6502, mapper: &mut dyn Mapper| {
             let data = mapper.read(cpu.pc);
             cpu.pc += 1;
@@ -95,27 +112,52 @@ impl Mos6502 {
         MicrocodeTask::Read(read, operation)
     }
 
+    fn read_pc_increment(cpu: &mut Mos6502, mapper: &mut dyn Mapper) -> u8 {
+        let data = Self::read_pc(cpu, mapper);
+        cpu.pc += 1; 
+        data
+    }
+
+    fn read_pc(cpu: &mut Mos6502, mapper: &mut dyn Mapper) -> u8 {
+        mapper.read(cpu.pc)
+    }
+
+    fn read_fixed<const ADDRESS: u16>(cpu: &mut Mos6502, mapper: &mut dyn Mapper) -> u8 {
+        mapper.read(ADDRESS)
+    }
+
     // fn push_stack(self: &mut Self, mapper: &mut dyn Mapper, data: u8) {
     //     mapper.write((self.s & 0xff) as u16 + STACK_OFFSET, data);
     //     self.s -= 1;
     // }
 
-    fn push_stack(operation: MicrocodeWriteOperation) -> MicrocodeTask {
-        let write = |cpu: &mut Mos6502, mapper: &mut dyn Mapper, data: u8| {
-            mapper.write((cpu.s & 0xff) as u16 + STACK_OFFSET, data);
-            cpu.s -= 1;
-        };
-
-        MicrocodeTask::Write(write, operation)
+    fn push_stack(cpu: &mut Mos6502, mapper: &mut dyn Mapper, data: u8) {
+        mapper.write((cpu.s & 0xff) as u16 + STACK_OFFSET, data);
+        cpu.s -= 1;
     }
 
-    fn immediate(operation: MicrocodeReadOperation) -> MicrocodeTask {
+    fn immediate(self: &mut Self, operation: MicrocodeReadOperation) {
         let read = |cpu: &mut Mos6502, mapper: &mut dyn Mapper| {
             let data = mapper.read(cpu.pc);
             data
         };
         
-        MicrocodeTask::Read(read, operation)
+        self.queue_task(MicrocodeTask::Read(read, operation));
+    }
+
+    // I'll probably need to rename this as absolute addressing for JMP commands don' have a follow-up bus read or write
+    fn absolute(self: &mut Self, operation: MicrocodeReadOperation) {
+        let read = |cpu: &mut Mos6502, mapper: &mut dyn Mapper| {
+            let data = mapper.read(cpu.pc);
+            data
+        };
+        
+        self.queue_read(Self::read_pc_increment, Self::set_address_low);
+        self.queue_read(Self::read_pc, operation);
+    }
+
+    fn set_address_low(cpu: &mut Mos6502, data: u8) {
+        cpu.address.set_low(data);
     }
 
     // fn push_from_pc_high(self: &mut Self, mapper: &mut dyn Mapper) {
@@ -129,16 +171,16 @@ impl Mos6502 {
     // }
 
     fn brk(self: &mut Self) {
-        self.queue(Self::read_pc(|cpu, data| cpu.p.set(Status::INTERRUPT_DISABLE, true)));
-        self.queue(Self::push_stack(|cpu| cpu.pc.get_high()));
-        self.queue(Self::push_stack(|cpu| cpu.pc.get_low()));
-        self.queue(Self::push_stack(|cpu| cpu.p.bits));
-        self.queue(MicrocodeTask::Read(|cpu: &mut Mos6502, mapper: &mut dyn Mapper| mapper.read(0xfffe), |cpu, data| cpu.pc.set_low(data)));
-        self.queue(MicrocodeTask::Read(|cpu: &mut Mos6502, mapper: &mut dyn Mapper| mapper.read(0xffff), |cpu, data| cpu.pc.set_high(data)));
+        self.queue_read(Self::read_pc, |cpu, _| cpu.p.set(Status::INTERRUPT_DISABLE, true));
+        self.queue_write(Self::push_stack, |cpu| cpu.pc.get_high());
+        self.queue_write(Self::push_stack, |cpu| cpu.pc.get_low());
+        self.queue_write(Self::push_stack, |cpu| cpu.p.bits);
+        self.queue_read(Self::read_fixed::<0xfffe>, |cpu, data| cpu.pc.set_low(data));
+        self.queue_read(Self::read_fixed::<0xffff>, |cpu, data| cpu.pc.set_high(data));
     }
 
-    fn jmp(self: &mut Self) {
-        todo!();
+    fn jmp(cpu: &mut Mos6502, data: u8) {
+        cpu.pc = u16::from_high_low(data, cpu.address.get_low());
     }
 
     fn sei(cpu: &mut Mos6502, _: u8) {
@@ -162,7 +204,7 @@ impl RP2A03 for Mos6502 {
     fn cycle(self: &mut Self, mapper: &mut dyn Mapper) {
         let microcode = match self.cycle_microcode_queue.pop_front() {
             Some(microcode) => microcode,
-            None => Self::read_pc(Self::decode_opcode),
+            None => MicrocodeTask::Read(Self::read_pc_increment, Self::decode_opcode),
         };
         
         match microcode {
@@ -182,8 +224,8 @@ impl RP2A03 for Mos6502 {
         match opcode {
             //00/04/08/0c/10/14/18/1c
             0x00 => self.brk(),
-            //0x4c => self.queue(Self::Absolute(self.jmp())),
-            0x78 => self.queue(Self::immediate(Self::sei)),
+            0x4c => self.absolute(Self::jmp),
+            0x78 => self.immediate(Self::sei),
             //01/05/09/0d/11/15/19/1d
             //02/06/0a/0e/12/16/1a/1e
             //03/07/0b/0f/13/17/1b/1f
