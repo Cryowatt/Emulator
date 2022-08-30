@@ -4,8 +4,16 @@ use bitflags::bitflags;
 
 use crate::roms::Mapper;
 
-type MicrocodeTask = fn(&mut Mos6502, &mut dyn Mapper);
+//type MicrocodeTask = fn(&mut Mos6502, &mut dyn Mapper);
+enum MicrocodeTask {
+    Read(BusRead, MicrocodeReadOperation),
+    Write(BusWrite, MicrocodeWriteOperation),
+}
 
+type BusRead = fn(&mut Mos6502, &mut dyn Mapper) -> u8;
+type BusWrite = fn(&mut Mos6502, &mut dyn Mapper, data: u8);
+type MicrocodeReadOperation = fn(&mut Mos6502, data: u8);
+type MicrocodeWriteOperation = fn(&mut Mos6502) -> u8;
 const STACK_OFFSET: u16 = 0x0100;
 
 bitflags! {
@@ -73,45 +81,59 @@ impl Mos6502 {
         }
     }
 
-    fn push_stack(self: &mut Self, mapper: &mut dyn Mapper, data: u8) {
-        mapper.write((self.s & 0xff) as u16 + STACK_OFFSET, data);
-        self.s -= 1;
+    fn queue(self: &mut Self, task: MicrocodeTask) {
+        self.cycle_microcode_queue.push_back(task);
     }
 
-    fn push_from_pc_high(self: &mut Self, mapper: &mut dyn Mapper) {
-        let data = self.pc.get_high();
-        self.push_stack(mapper, data);
+    fn read_pc(operation: MicrocodeReadOperation) -> MicrocodeTask {
+        let read = |cpu: &mut Mos6502, mapper: &mut dyn Mapper| {
+            let data = mapper.read(cpu.pc);
+            cpu.pc += 1;
+            data
+        };
+        
+        MicrocodeTask::Read(read, operation)
     }
 
-    fn push_from_pc_low(self: &mut Self, mapper: &mut dyn Mapper) {
-        let data = self.pc.get_low();
-        self.push_stack(mapper, data);
+    // fn push_stack(self: &mut Self, mapper: &mut dyn Mapper, data: u8) {
+    //     mapper.write((self.s & 0xff) as u16 + STACK_OFFSET, data);
+    //     self.s -= 1;
+    // }
+
+    fn push_stack(operation: MicrocodeWriteOperation) -> MicrocodeTask {
+        let write = |cpu: &mut Mos6502, mapper: &mut dyn Mapper, data: u8| {
+            mapper.write((cpu.s & 0xff) as u16 + STACK_OFFSET, data);
+            cpu.s -= 1;
+        };
+
+        MicrocodeTask::Write(write, operation)
     }
+
+    // fn push_from_pc_high(self: &mut Self, mapper: &mut dyn Mapper) {
+    //     let data = self.pc.get_high();
+    //     self.push_stack(mapper, data);
+    // }
+
+    // fn push_from_pc_low(self: &mut Self, mapper: &mut dyn Mapper) {
+    //     let data = self.pc.get_low();
+    //     self.push_stack(mapper, data);
+    // }
 
     fn brk(self: &mut Self) {
-        self.cycle_microcode_queue.push_back(|cpu, mapper| { 
-            cpu.pc += 1;
-            mapper.read(cpu.pc);
-            //c.regs.InterruptDisable = true;
-        });
-        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.push_from_pc_high(mapper));
-        // Enqueue(PushStackFromPCH);
-        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.push_from_pc_low(mapper));
-        // Enqueue(PushStackFromPCL);
-        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.push_stack(mapper, cpu.p.bits));
-        // Enqueue(PushStackFromP);
-        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.pc.set_low(mapper.read(0xfffe)));
-        // Enqueue(c => c.regs.PC.Low = c.Read(new Address(0xfffe)));
-        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.pc.set_high(mapper.read(0xffff)));
-        // Enqueue(c =>
-        // {
-        //     c.regs.PC.High = c.Read(new Address(0xffff));
-        //     c.TraceInstruction("BRK");
-        // });
+        self.queue(Self::read_pc(|cpu, data| cpu.p.set(Status::INTERRUPT_DISABLE, true)));
+        self.queue(Self::push_stack(|cpu| cpu.pc.get_high()));
+        self.queue(Self::push_stack(|cpu| cpu.pc.get_low()));
+        self.queue(Self::push_stack(|cpu| cpu.p.bits));
+        self.queue(MicrocodeTask::Read(|cpu: &mut Mos6502, mapper: &mut dyn Mapper| mapper.read(0xfffe), |cpu, data| cpu.pc.set_low(data)));
+        self.queue(MicrocodeTask::Read(|cpu: &mut Mos6502, mapper: &mut dyn Mapper| mapper.read(0xffff), |cpu, data| cpu.pc.set_high(data)));
+    }
+
+    fn jmp(self: &mut Self) {
+        todo!();
     }
 
     fn sei(self: &mut Self) {
-        self.p.set(Status::INTERRUPT_DISABLE, true);
+        self.queue(Self::read_pc(|cpu, _| cpu.p.set(Status::INTERRUPT_DISABLE, true)));
     }
 }
 
@@ -122,7 +144,7 @@ pub trait RP2A03 {
 
     fn cycle(self: &mut Self, mapper: &mut dyn Mapper);
 
-    fn decode_opcode(self: &mut Self, mapper: &mut dyn Mapper) -> MicrocodeTask;
+    fn decode_opcode(self: &mut Self, opcode: u8);
 }
 
 impl RP2A03 for Mos6502 {
@@ -131,21 +153,28 @@ impl RP2A03 for Mos6502 {
     fn cycle(self: &mut Self, mapper: &mut dyn Mapper) {
         let microcode = match self.cycle_microcode_queue.pop_front() {
             Some(microcode) => microcode,
-            None => self.decode_opcode(mapper)
+            None => Self::read_pc(Self::decode_opcode),
         };
         
-        microcode(self, mapper);
+        match microcode {
+            MicrocodeTask::Read(read, op) => {
+                let data = read(self, mapper);
+                op(self, data);
+            },
+            MicrocodeTask::Write(write, op) => {
+                let data = op(self);
+                write(self, mapper, data);
+            }
+        }
     }
 
-    fn decode_opcode(self: &mut Self, mapper: &mut dyn Mapper) -> MicrocodeTask {
-        let opcode = mapper.read(self.pc);
-        self.pc += 1;
-
-        
+    //fn decode_opcode(self: &mut Self, mapper: &mut dyn Mapper) {
+    fn decode_opcode(self: &mut Self, opcode: u8) {
         match opcode {
             //00/04/08/0c/10/14/18/1c
-            0x00 => |cpu, mapper| cpu.brk(),
-            0x78 => |cpu, mapper| cpu.sei(),
+            0x00 => self.brk(),
+            0x4c => self.jmp(),
+            0x78 => self.sei(),
             //01/05/09/0d/11/15/19/1d
             //02/06/0a/0e/12/16/1a/1e
             //03/07/0b/0f/13/17/1b/1f
@@ -159,8 +188,12 @@ impl RP2A03 for Mos6502 {
     }
 
     fn reset(self: &mut Self) {
-        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.pc.set_low(mapper.read(0xfffc)));
+        self.cycle_microcode_queue.push_back(MicrocodeTask::Read(
+            |cpu, mapper| mapper.read(0xfffc),
+            |cpu, data| cpu.pc.set_low(data)));
         // Enqueue(PushStackFromPCH);
-        self.cycle_microcode_queue.push_back(|cpu, mapper| cpu.pc.set_high(mapper.read(0xfffd)));
+        self.cycle_microcode_queue.push_back(MicrocodeTask::Read(
+            |cpu, mapper| mapper.read(0xfffd),
+            |cpu, data| cpu.pc.set_high(data)));
     }
 }
