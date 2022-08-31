@@ -85,17 +85,17 @@ impl Mos6502 {
         MicrocodeTask::Read(read, operation)
     }
 
-    fn read_pc_increment(cpu: &mut Mos6502, mapper: &mut dyn Mapper) -> u8 {
+    fn read_pc_increment(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
         let data = Self::read_pc(cpu, mapper);
         cpu.pc += 1; 
         data
     }
 
-    fn read_pc(cpu: &mut Mos6502, mapper: &mut dyn Mapper) -> u8 {
+    fn read_pc(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
         mapper.read(cpu.pc)
     }
 
-    fn read_fixed<const ADDRESS: u16>(cpu: &mut Mos6502, mapper: &mut dyn Mapper) -> u8 {
+    fn read_fixed<const ADDRESS: u16>(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
         mapper.read(ADDRESS)
     }
 
@@ -104,20 +104,20 @@ impl Mos6502 {
     //     self.s -= 1;
     // }
 
-    fn push_stack(cpu: &mut Mos6502, mapper: &mut dyn Mapper, data: u8) {
+    fn push_stack(cpu: &mut Self, mapper: &mut dyn Mapper, data: u8) {
         mapper.write((cpu.s & 0xff) as u16 + STACK_OFFSET, data);
         cpu.s -= 1;
     }
 
-    fn set_address_low(cpu: &mut Mos6502, data: u8) {
+    fn set_address_low(cpu: &mut Self, data: u8) {
         cpu.address.set_low(data);
     }
 
-    fn set_address_high(cpu: &mut Mos6502, data: u8) {
+    fn set_address_high(cpu: &mut Self, data: u8) {
         cpu.address.set_high(data);
     }
 
-    fn write_address(cpu: &mut Mos6502, mapper: &mut dyn Mapper, data: u8) {
+    fn write_address(cpu: &mut Self, mapper: &mut dyn Mapper, data: u8) {
         mapper.write(cpu.address, data);
     }
 
@@ -144,35 +144,50 @@ impl Mos6502 {
     }
 
     fn jmp(self: &mut Self) {
-        self.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
-        self.queue_read(Mos6502::read_pc, |cpu, data| {
+        self.queue_read(Self::read_pc_increment, Self::set_address_low);
+        self.queue_read(Self::read_pc, |cpu, data| {
             cpu.pc = u16::from_high_low(data, cpu.address.get_low());
             println!("JMP ${:X}", cpu.pc);
         });
     }
 
-    fn sei(cpu: &mut Mos6502, _: u8) {
-        cpu.p.set(Status::INTERRUPT_DISABLE, true);
+    // Logic and Math
+    fn inx(cpu: &mut Self, _: u8) {
+        cpu.x = cpu.x.wrapping_add(1);
     }
 
-    fn cld(cpu: &mut Mos6502, _: u8) {
-        cpu.p.set(Status::DECIMAL, false);
-    }
-
-    fn sta(cpu: &mut Mos6502) -> u8 {
-        cpu.a
-    }
-
-    fn lda(cpu: &mut Mos6502, data: u8) {
+    // Move
+    fn lda(cpu: &mut Self, data: u8) {
         cpu.a = data;
     }
 
-    fn ldx(cpu: &mut Mos6502, data: u8) {
+    fn ldx(cpu: &mut Self, data: u8) {
         cpu.x = data;
     }
 
-    fn txs(cpu: &mut Mos6502, _: u8) {
+    fn sta(cpu: &mut Self) -> u8 {
+        cpu.a
+    }
+
+    fn stx(cpu: &mut Self) -> u8 {
+        cpu.x
+    }
+
+    fn txa(cpu: &mut Self, _: u8) {
+        cpu.a = cpu.x;
+    }
+
+    fn txs(cpu: &mut Self, _: u8) {
         cpu.s = cpu.x;
+    }
+
+    // Flags
+    fn sei(cpu: &mut Self, _: u8) {
+        cpu.p.set(Status::INTERRUPT_DISABLE, true);
+    }
+
+    fn cld(cpu: &mut Self, _: u8) {
+        cpu.p.set(Status::DECIMAL, false);
     }
 }
 
@@ -218,10 +233,13 @@ impl RP2A03 for Mos6502 {
             0x4c => self.jmp(),
             0x78 => (Self::sei as MicrocodeReadOperation).implied(self),
             0xd8 => (Self::cld as MicrocodeReadOperation).implied(self),
+            0xe8 => (Self::inx as MicrocodeReadOperation).implied(self),
             //01/05/09/0d/11/15/19/1d
             0x8d => (Self::sta as MicrocodeWriteOperation).absolute(self),
             0xa9 => (Self::lda as MicrocodeReadOperation).immediate(self),
             //02/06/0a/0e/12/16/1a/1e
+            0x8a => (Self::txa as MicrocodeReadOperation).immediate(self),
+            0x8e => (Self::stx as MicrocodeWriteOperation).absolute(self),
             0x9a => (Self::txs as MicrocodeReadOperation).implied(self),
             0xa2 => (Self::ldx as MicrocodeReadOperation).immediate(self),
             //03/07/0b/0f/13/17/1b/1f
