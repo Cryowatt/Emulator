@@ -1,10 +1,13 @@
+mod addressing_modes;
+
 use std::{collections::VecDeque};
 
 use bitflags::bitflags;
 
-use crate::roms::Mapper;
+use crate::{roms::Mapper};
 
-//type MicrocodeTask = fn(&mut Mos6502, &mut dyn Mapper);
+use self::addressing_modes::AddressingModes;
+
 enum MicrocodeTask {
     Read(BusRead, MicrocodeReadOperation),
     Write(BusWrite, MicrocodeWriteOperation),
@@ -134,26 +137,6 @@ impl Mos6502 {
     fn push_stack(cpu: &mut Mos6502, mapper: &mut dyn Mapper, data: u8) {
         mapper.write((cpu.s & 0xff) as u16 + STACK_OFFSET, data);
         cpu.s -= 1;
-    }
-
-    fn immediate(self: &mut Self, operation: MicrocodeReadOperation) {
-        let read = |cpu: &mut Mos6502, mapper: &mut dyn Mapper| {
-            let data = mapper.read(cpu.pc);
-            data
-        };
-        
-        self.queue_task(MicrocodeTask::Read(read, operation));
-    }
-
-    // I'll probably need to rename this as absolute addressing for JMP commands don' have a follow-up bus read or write
-    fn absolute(self: &mut Self, operation: MicrocodeReadOperation) {
-        let read = |cpu: &mut Mos6502, mapper: &mut dyn Mapper| {
-            let data = mapper.read(cpu.pc);
-            data
-        };
-        
-        self.queue_read(Self::read_pc_increment, Self::set_address_low);
-        self.queue_read(Self::read_pc, operation);
     }
 
     fn set_address_low(cpu: &mut Mos6502, data: u8) {
