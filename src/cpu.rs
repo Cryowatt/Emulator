@@ -6,7 +6,7 @@ use bitflags::bitflags;
 
 use crate::{roms::Mapper, address::Address};
 
-use self::addressing_modes::AddressingModes;
+use self::addressing_modes::{AddressingModes, MicrocodeReadOperation, MicrocodeWriteOperation};
 
 enum MicrocodeTask {
     Read(BusRead, MicrocodeReadOperation),
@@ -15,8 +15,6 @@ enum MicrocodeTask {
 
 type BusRead = fn(&mut Mos6502, &mut dyn Mapper) -> u8;
 type BusWrite = fn(&mut Mos6502, &mut dyn Mapper, data: u8);
-type MicrocodeReadOperation = fn(&mut Mos6502, data: u8);
-type MicrocodeWriteOperation = fn(&mut Mos6502) -> u8;
 const STACK_OFFSET: u16 = 0x0100;
 
 bitflags! {
@@ -113,6 +111,14 @@ impl Mos6502 {
         cpu.address.set_low(data);
     }
 
+    fn set_address_high(cpu: &mut Mos6502, data: u8) {
+        cpu.address.set_high(data);
+    }
+
+    fn write_address(cpu: &mut Mos6502, mapper: &mut dyn Mapper, data: u8) {
+        mapper.write(cpu.address, data);
+    }
+
     // fn push_from_pc_high(self: &mut Self, mapper: &mut dyn Mapper) {
     //     let data = self.pc.get_high();
     //     self.push_stack(mapper, data);
@@ -138,6 +144,10 @@ impl Mos6502 {
 
     fn sei(cpu: &mut Mos6502, _: u8) {
         cpu.p.set(Status::INTERRUPT_DISABLE, true);
+    }
+
+    fn sta(cpu: &mut Mos6502) -> u8 {
+        cpu.a
     }
 }
 
@@ -177,9 +187,10 @@ impl RP2A03 for Mos6502 {
         match opcode {
             //00/04/08/0c/10/14/18/1c
             0x00 => self.brk(),
-            0x4c => self.absolute(Self::jmp),
-            0x78 => self.immediate(Self::sei),
+            0x4c => (Self::jmp as MicrocodeReadOperation).absolute(self),
+            0x78 => (Self::sei as MicrocodeReadOperation).immediate(self),
             //01/05/09/0d/11/15/19/1d
+            0x84 => (Self::sta as MicrocodeWriteOperation).absolute(self),
             //02/06/0a/0e/12/16/1a/1e
             //03/07/0b/0f/13/17/1b/1f
 
