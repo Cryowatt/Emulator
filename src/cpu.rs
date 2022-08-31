@@ -99,10 +99,9 @@ impl Mos6502 {
         mapper.read(ADDRESS)
     }
 
-    // fn push_stack(self: &mut Self, mapper: &mut dyn Mapper, data: u8) {
-    //     mapper.write((self.s & 0xff) as u16 + STACK_OFFSET, data);
-    //     self.s -= 1;
-    // }
+    fn read_stack(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
+        mapper.read(STACK_OFFSET + cpu.s as u16)
+    }
 
     fn push_stack(cpu: &mut Self, mapper: &mut dyn Mapper, data: u8) {
         mapper.write((cpu.s & 0xff) as u16 + STACK_OFFSET, data);
@@ -121,16 +120,6 @@ impl Mos6502 {
         mapper.write(cpu.address, data);
     }
 
-    // fn push_from_pc_high(self: &mut Self, mapper: &mut dyn Mapper) {
-    //     let data = self.pc.get_high();
-    //     self.push_stack(mapper, data);
-    // }
-
-    // fn push_from_pc_low(self: &mut Self, mapper: &mut dyn Mapper) {
-    //     let data = self.pc.get_low();
-    //     self.push_stack(mapper, data);
-    // }
-
     fn brk(self: &mut Self) {
         self.queue_read(Self::read_pc, |cpu, _| cpu.p.set(Status::INTERRUPT_DISABLE, true));
         self.queue_write(Self::push_stack, |cpu| cpu.pc.get_high());
@@ -140,6 +129,18 @@ impl Mos6502 {
         self.queue_read(Self::read_fixed::<0xffff>, |cpu, data| {
             println!("BRK");
             cpu.pc.set_high(data);
+        });
+    }
+
+    fn jsr(self: &mut Self) {
+        self.queue_read(Self::read_pc_increment, |cpu, data| cpu.address.set_low(data));
+        self.queue_read(Self::read_stack, |cpu, data| ());
+        self.queue_write(Self::push_stack, |cpu| cpu.pc.get_high());
+        self.queue_write(Self::push_stack, |cpu| cpu.pc.get_low());
+        self.queue_read(Self::read_pc, |cpu, data| {
+            cpu.address.set_high(data);
+            cpu.pc = cpu.address;
+            println!("JSR ${:X}", cpu.address);
         });
     }
 
@@ -230,6 +231,7 @@ impl RP2A03 for Mos6502 {
         match opcode {
             //00/04/08/0c/10/14/18/1c
             0x00 => self.brk(),
+            0x20 => self.jsr(),
             0x4c => self.jmp(),
             0x78 => (Self::sei as MicrocodeReadOperation).implied(self),
             0xd8 => (Self::cld as MicrocodeReadOperation).implied(self),
@@ -256,7 +258,6 @@ impl RP2A03 for Mos6502 {
         self.cycle_microcode_queue.push_back(MicrocodeTask::Read(
             |cpu, mapper| mapper.read(0xfffc),
             |cpu, data| cpu.pc.set_low(data)));
-        // Enqueue(PushStackFromPCH);
         self.cycle_microcode_queue.push_back(MicrocodeTask::Read(
             |cpu, mapper| mapper.read(0xfffd),
             |cpu, data| cpu.pc.set_high(data)));
