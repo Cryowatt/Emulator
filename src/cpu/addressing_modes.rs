@@ -6,6 +6,7 @@ pub type MicrocodeReadOperation = fn(&mut Mos6502, data: u8);
 pub type MicrocodeWriteOperation = fn(&mut Mos6502) -> u8;
 
 pub trait AddressingModes {
+    fn implied(self, cpu: &mut Mos6502);
     fn immediate(self, cpu: &mut Mos6502);
     // fn immediate(self: &mut Self, operation: MicrocodeReadOperation);
 
@@ -16,12 +17,16 @@ pub trait AddressingModes {
 
 impl AddressingModes for MicrocodeReadOperation {
     fn immediate(self, cpu: &mut Mos6502) {
-        cpu.queue_task(MicrocodeTask::Read(Mos6502::read_pc, self));
+        cpu.queue_task(MicrocodeTask::Read(Mos6502::read_pc_increment, self));
     }
 
     fn absolute(self, cpu: &mut Mos6502) {
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
         cpu.queue_read(Mos6502::read_pc, self);
+    }
+
+    fn implied(self, cpu: &mut Mos6502) {
+        cpu.queue_task(MicrocodeTask::Read(Mos6502::read_pc, self));
     }
 }
 
@@ -40,6 +45,10 @@ impl AddressingModes for MicrocodeWriteOperation {
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_high);
         cpu.queue_write(Mos6502::write_address, self);
+    }
+
+    fn implied(self, cpu: &mut Mos6502) {
+        todo!()
     }
 }
 
