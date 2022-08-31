@@ -40,6 +40,7 @@ pub struct Mos6502 {
     pub x: u8,
     pub y: u8,
 
+    opcode: u8,
     address: u16,
 
     cycle_microcode_queue: VecDeque<MicrocodeTask>,
@@ -55,6 +56,7 @@ impl Mos6502 {
             x: 0x00,
             y: 0x00,
 
+            opcode: 0x00,
             address: 0x0000,
 
             cycle_microcode_queue: VecDeque::with_capacity(8),
@@ -135,15 +137,26 @@ impl Mos6502 {
         self.queue_write(Self::push_stack, |cpu| cpu.pc.get_low());
         self.queue_write(Self::push_stack, |cpu| cpu.p.bits);
         self.queue_read(Self::read_fixed::<0xfffe>, |cpu, data| cpu.pc.set_low(data));
-        self.queue_read(Self::read_fixed::<0xffff>, |cpu, data| cpu.pc.set_high(data));
+        self.queue_read(Self::read_fixed::<0xffff>, |cpu, data| {
+            println!("BRK");
+            cpu.pc.set_high(data);
+        });
     }
 
-    fn jmp(cpu: &mut Mos6502, data: u8) {
-        cpu.pc = u16::from_high_low(data, cpu.address.get_low());
+    fn jmp(self: &mut Self) {
+        self.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
+        self.queue_read(Mos6502::read_pc, |cpu, data| {
+            cpu.pc = u16::from_high_low(data, cpu.address.get_low());
+            println!("JMP ${:X}", cpu.pc);
+        });
     }
 
     fn sei(cpu: &mut Mos6502, _: u8) {
         cpu.p.set(Status::INTERRUPT_DISABLE, true);
+    }
+
+    fn cld(cpu: &mut Mos6502, _: u8) {
+        cpu.p.set(Status::DECIMAL, false);
     }
 
     fn sta(cpu: &mut Mos6502) -> u8 {
@@ -172,7 +185,6 @@ impl RP2A03 for Mos6502 {
         let microcode = match self.cycle_microcode_queue.pop_front() {
             Some(microcode) => microcode,
             None => {
-                println!("==OPCODE==");
                 MicrocodeTask::Read(Self::read_pc_increment, Self::decode_opcode)
             },
         };
@@ -191,15 +203,18 @@ impl RP2A03 for Mos6502 {
 
     //fn decode_opcode(self: &mut Self, mapper: &mut dyn Mapper) {
     fn decode_opcode(self: &mut Self, opcode: u8) {
+        self.opcode = opcode;
         match opcode {
             //00/04/08/0c/10/14/18/1c
             0x00 => self.brk(),
-            0x4c => (Self::jmp as MicrocodeReadOperation).absolute(self),
+            0x4c => self.jmp(),
             0x78 => (Self::sei as MicrocodeReadOperation).implied(self),
+            0xd8 => (Self::cld as MicrocodeReadOperation).implied(self),
             //01/05/09/0d/11/15/19/1d
             0x8d => (Self::sta as MicrocodeWriteOperation).absolute(self),
             0xa9 => (Self::lda as MicrocodeReadOperation).immediate(self),
             //02/06/0a/0e/12/16/1a/1e
+            //0xa2 => (Self::)
             //03/07/0b/0f/13/17/1b/1f
 
             //83 =>  |cpu, mapper| cpu.sax(),
