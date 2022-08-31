@@ -166,6 +166,14 @@ impl Mos6502 {
     fn lda(cpu: &mut Mos6502, data: u8) {
         cpu.a = data;
     }
+
+    fn ldx(cpu: &mut Mos6502, data: u8) {
+        cpu.x = data;
+    }
+
+    fn txs(cpu: &mut Mos6502, _: u8) {
+        cpu.s = cpu.x;
+    }
 }
 
 pub trait RP2A03 {
@@ -214,7 +222,8 @@ impl RP2A03 for Mos6502 {
             0x8d => (Self::sta as MicrocodeWriteOperation).absolute(self),
             0xa9 => (Self::lda as MicrocodeReadOperation).immediate(self),
             //02/06/0a/0e/12/16/1a/1e
-            //0xa2 => (Self::)
+            0x9a => (Self::txs as MicrocodeReadOperation).implied(self),
+            0xa2 => (Self::ldx as MicrocodeReadOperation).immediate(self),
             //03/07/0b/0f/13/17/1b/1f
 
             //83 =>  |cpu, mapper| cpu.sax(),

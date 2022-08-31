@@ -37,7 +37,7 @@ impl AddressingModes for MicrocodeReadOperation {
     fn immediate(self, cpu: &mut Mos6502) {
         cpu.queue_task(MicrocodeTask::Read(|cpu, mapper| {
             let data = Mos6502::read_pc_increment(cpu, mapper);
-            println!("{} #${}", OPCODES[cpu.opcode as usize], data);
+            println!("{} #${:X}", OPCODES[cpu.opcode as usize], data);
             data
         }, self));
     }
