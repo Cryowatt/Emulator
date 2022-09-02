@@ -1,4 +1,5 @@
 mod addressing_modes;
+pub mod instructions;
 
 use std::{collections::VecDeque};
 
@@ -6,7 +7,7 @@ use bitflags::bitflags;
 
 use crate::{roms::Mapper, address::Address};
 
-use self::addressing_modes::{AddressingModes, MicrocodeReadOperation, MicrocodeWriteOperation};
+pub use self::{addressing_modes::{AddressingModes, MicrocodeReadOperation, MicrocodeWriteOperation}, instructions::MOS6502Instructions};
 
 enum MicrocodeTask {
     Read(BusRead, MicrocodeReadOperation),
@@ -118,77 +119,6 @@ impl Mos6502 {
 
     fn write_address(cpu: &mut Self, mapper: &mut dyn Mapper, data: u8) {
         mapper.write(cpu.address, data);
-    }
-
-    fn brk(self: &mut Self) {
-        self.queue_read(Self::read_pc, |cpu, _| cpu.p.set(Status::INTERRUPT_DISABLE, true));
-        self.queue_write(Self::push_stack, |cpu| cpu.pc.get_high());
-        self.queue_write(Self::push_stack, |cpu| cpu.pc.get_low());
-        self.queue_write(Self::push_stack, |cpu| cpu.p.bits);
-        self.queue_read(Self::read_fixed::<0xfffe>, |cpu, data| cpu.pc.set_low(data));
-        self.queue_read(Self::read_fixed::<0xffff>, |cpu, data| {
-            println!("BRK");
-            cpu.pc.set_high(data);
-        });
-    }
-
-    fn jsr(self: &mut Self) {
-        self.queue_read(Self::read_pc_increment, |cpu, data| cpu.address.set_low(data));
-        self.queue_read(Self::read_stack, |cpu, data| ());
-        self.queue_write(Self::push_stack, |cpu| cpu.pc.get_high());
-        self.queue_write(Self::push_stack, |cpu| cpu.pc.get_low());
-        self.queue_read(Self::read_pc, |cpu, data| {
-            cpu.address.set_high(data);
-            cpu.pc = cpu.address;
-            println!("JSR ${:X}", cpu.address);
-        });
-    }
-
-    fn jmp(self: &mut Self) {
-        self.queue_read(Self::read_pc_increment, Self::set_address_low);
-        self.queue_read(Self::read_pc, |cpu, data| {
-            cpu.pc = u16::from_high_low(data, cpu.address.get_low());
-            println!("JMP ${:X}", cpu.pc);
-        });
-    }
-
-    // Logic and Math
-    fn inx(cpu: &mut Self, _: u8) {
-        cpu.x = cpu.x.wrapping_add(1);
-    }
-
-    // Move
-    fn lda(cpu: &mut Self, data: u8) {
-        cpu.a = data;
-    }
-
-    fn ldx(cpu: &mut Self, data: u8) {
-        cpu.x = data;
-    }
-
-    fn sta(cpu: &mut Self) -> u8 {
-        cpu.a
-    }
-
-    fn stx(cpu: &mut Self) -> u8 {
-        cpu.x
-    }
-
-    fn txa(cpu: &mut Self, _: u8) {
-        cpu.a = cpu.x;
-    }
-
-    fn txs(cpu: &mut Self, _: u8) {
-        cpu.s = cpu.x;
-    }
-
-    // Flags
-    fn sei(cpu: &mut Self, _: u8) {
-        cpu.p.set(Status::INTERRUPT_DISABLE, true);
-    }
-
-    fn cld(cpu: &mut Self, _: u8) {
-        cpu.p.set(Status::DECIMAL, false);
     }
 }
 
