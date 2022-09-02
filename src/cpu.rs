@@ -25,8 +25,9 @@ bitflags! {
         const ZERO = 0b00000010;
         const INTERRUPT_DISABLE = 0b00000100;
         const DECIMAL = 0b00001000;
-        const UNDEFINED_5 = 0b00010000;
-        const UNDEFINED_6 = 0b00100000;
+        const BREAK = 0b00110000;
+        const IRQ = 0b00100000;
+        const NMI = 0b00100000;
         const OVERFLOW = 0b01000000;
         const NEGATIVE = 0b10000000;
         const DEFAULT = 0b00110000;
@@ -119,6 +120,14 @@ impl Mos6502 {
 
     fn write_address(cpu: &mut Self, mapper: &mut dyn Mapper, data: u8) {
         mapper.write(cpu.address, data);
+    }
+
+    fn set_negative_flag(&mut self, data: u8) {
+        self.p.set(Status::NEGATIVE, (data as i8) < 0);
+    }
+
+    fn set_zero_flag(&mut self, data: u8) {
+        self.p.set(Status::ZERO, data == 0);
     }
 }
 

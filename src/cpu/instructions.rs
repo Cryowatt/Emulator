@@ -111,6 +111,7 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::read_fixed::<0xffff>, |cpu, data| {
             println!("BRK");
             cpu.pc.set_high(data);
+            cpu.p.set(Status::BREAK, true);
         });
     }
 
@@ -172,6 +173,8 @@ impl MOS6502Instructions for Mos6502 {
 
     fn inx(&mut self, data: u8) {
         self.x = self.x.wrapping_add(1);
+        self.set_zero_flag(self.x);
+        self.set_negative_flag(self.x);
     }
 
     fn iny(&mut self, data: u8) {
@@ -200,10 +203,14 @@ impl MOS6502Instructions for Mos6502 {
 
     fn lda(&mut self, data: u8) {
         self.a = data;
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
     }
 
     fn ldx(&mut self, data: u8) {
         self.x = data;
+        self.set_zero_flag(self.x);
+        self.set_negative_flag(self.x);
     }
 
     fn ldy(&mut self, data: u8) {
