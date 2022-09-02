@@ -214,7 +214,9 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn ldy(&mut self, data: u8) {
-        todo!()
+        self.y = data;
+        self.set_zero_flag(self.y);
+        self.set_negative_flag(self.y);
     }
 
     fn lsr(&mut self, data: u8) {
@@ -286,7 +288,7 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn sty(&mut self) -> u8 {
-        todo!()
+        self.y
     }
 
     fn tax(&mut self, data: u8) {

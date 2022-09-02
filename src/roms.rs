@@ -198,7 +198,7 @@ impl Mapper for NROM {
             _ => self.program_rom_bank1.read(address),
         };
 
-        println!("${:04X} -> {:x}", address, data);
+        println!("${:04X} -> {:02x}", address, data);
         data
      }
 
@@ -213,7 +213,7 @@ impl Mapper for NROM {
             _ => self.program_rom_bank1.write(address, data),
         }
 
-        println!("${:04X} <- {:x}", address, data);
+        println!("${:04X} <- {:02x}", address, data);
     }
 }
 
