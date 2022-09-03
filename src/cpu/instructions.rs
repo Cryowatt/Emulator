@@ -63,7 +63,10 @@ pub trait MOS6502Instructions {
 
 impl MOS6502Instructions for Mos6502 {
     fn adc(&mut self, data: u8) {
-        todo!()
+        let (result, carry) = self.a.overflowing_add(data);
+        self.set_zero_flag(result);
+        self.p.set(Status::CARRY, carry);
+        self.p.set(Status::NEGATIVE, result & 0b1000_0000 > 0);
     }
 
     fn and(&mut self, data: u8) {

@@ -98,7 +98,12 @@ impl AddressingModes for MicrocodeReadOperation {
     }
 
     fn zero_page(self, cpu: &mut Mos6502) {
-        todo!()
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_zero_page_address);
+        cpu.queue_read(|cpu, mapper| {
+            let data = Mos6502::read_address(cpu, mapper);
+            println!("{} ${:02X}", OPCODES[cpu.opcode as usize], cpu.address);
+            data
+        }, self);
     }
 }
 
@@ -168,17 +173,12 @@ impl AddressingModes for MicrocodeReadWriteOperation {
     }
 
     fn zero_page(self, cpu: &mut Mos6502) {
-        // 2    PC     R  fetch address, increment PC
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_zero_page_address);
-        // 3  address  R  read from effective address
         cpu.queue_read(Mos6502::read_address, Mos6502::set_scratch);
-        // 4  address  W  write the value back to effective address,
-        //                and do the operation on it
         cpu.queue_read_write(|cpu, mapper, data| {
             mapper.write(cpu.address, cpu.scratch);
             cpu.scratch = data;
         }, self);
-        // 5  address  W  write the new value to effective address
         cpu.queue_write(|cpu, mapper, data| {
             Mos6502::write_address(cpu, mapper, data);
             println!("{} ${:02X}", OPCODES[cpu.opcode as usize], cpu.address);
