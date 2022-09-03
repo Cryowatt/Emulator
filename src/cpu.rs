@@ -14,9 +14,10 @@ enum MicrocodeTask {
     Branch(BusRead, MicrocodeBranchOperation, MicrocodeConditionalOperation),
     Read(BusRead, MicrocodeReadOperation),
     Write(BusWrite, MicrocodeWriteOperation),
-    ReadWrite(BusWrite, MicrocodeReadWriteOperation),
+    ReadWrite(GetInput, BusWrite, MicrocodeReadWriteOperation),
 }
 
+type GetInput = fn(&mut Mos6502) -> u8;
 type BusRead = fn(&mut Mos6502, &mut dyn Mapper) -> u8;
 type BusWrite = fn(&mut Mos6502, &mut dyn Mapper, data: u8);
 const STACK_OFFSET: u16 = 0x0100;
@@ -90,8 +91,8 @@ impl Mos6502 {
         self.cycle_microcode_queue.push_back(MicrocodeTask::Write(io_op, op));
     }
 
-    fn queue_read_write(self: &mut Self, io_op: BusWrite, op: MicrocodeReadWriteOperation) {
-        self.cycle_microcode_queue.push_back(MicrocodeTask::ReadWrite(io_op, op));
+    fn queue_read_write(self: &mut Self, get_input: GetInput, io_op: BusWrite, op: MicrocodeReadWriteOperation) {
+        self.cycle_microcode_queue.push_back(MicrocodeTask::ReadWrite(get_input, io_op, op));
     }
 
     fn read_address(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
@@ -195,8 +196,9 @@ impl RP2A03 for Mos6502 {
                 let data = op(self);
                 write(self, mapper, data);
             },
-            MicrocodeTask::ReadWrite(write, op) => {
-                let data = op(self, self.scratch);
+            MicrocodeTask::ReadWrite(get_input, write, op) => {
+                let input = get_input(self);
+                let data = op(self, input);
                 write(self, mapper, data);
             },
         }
@@ -223,6 +225,7 @@ impl RP2A03 for Mos6502 {
             0x91 => (Self::sta as MicrocodeWriteOperation).indirect_indexed_y(self),
             0xa9 => (Self::lda as MicrocodeReadOperation).immediate(self),
             //02/06/0a/0e/12/16/1a/1e
+            0x0a => (Self::asl as MicrocodeReadWriteOperation).accumulator(self),
             0x8a => (Self::txa as MicrocodeReadOperation).immediate(self),
             0x86 => (Self::stx as MicrocodeWriteOperation).zero_page(self),
             0x8e => (Self::stx as MicrocodeWriteOperation).absolute(self),

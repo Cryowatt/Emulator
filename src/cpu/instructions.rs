@@ -1,3 +1,5 @@
+use std::ops::Shl;
+
 use crate::address::Address;
 
 use super::{Mos6502, Status};
@@ -5,7 +7,7 @@ use super::{Mos6502, Status};
 pub trait MOS6502Instructions {
     fn adc(&mut self, data: u8);
     fn and(&mut self, data: u8);
-    fn asl(&mut self, data: u8);
+    fn asl(&mut self, data: u8) -> u8;
     fn bcc(&mut self) -> bool;
     fn bcs(&mut self) -> bool;
     fn beq(&mut self) -> bool;
@@ -65,16 +67,20 @@ impl MOS6502Instructions for Mos6502 {
     fn adc(&mut self, data: u8) {
         let (result, carry) = self.a.overflowing_add(data);
         self.set_zero_flag(result);
+        self.set_negative_flag(result);
         self.p.set(Status::CARRY, carry);
-        self.p.set(Status::NEGATIVE, result & 0b1000_0000 > 0);
     }
 
     fn and(&mut self, data: u8) {
         todo!()
     }
 
-    fn asl(&mut self, data: u8) {
-        todo!()
+    fn asl(&mut self, data: u8) -> u8{
+        let (result, carry) = data.overflowing_shl(1);
+        self.set_zero_flag(result);
+        self.set_negative_flag(result);
+        self.p.set(Status::CARRY, carry);
+        result
     }
 
     fn bcc(&mut self) -> bool {

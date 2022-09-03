@@ -66,6 +66,7 @@ impl BranchAddressingModes for MicrocodeBranchOperation {
 
 pub trait AddressingModes {
     fn absolute(self, cpu: &mut Mos6502);
+    fn accumulator(self, cpu: &mut Mos6502);
     fn immediate(self, cpu: &mut Mos6502);
     fn implied(self, cpu: &mut Mos6502);
     fn indirect_indexed_y(self, cpu: &mut Mos6502);
@@ -77,20 +78,24 @@ impl AddressingModes for MicrocodeReadOperation {
         todo!();
     }
 
+    fn accumulator(self, cpu: &mut Mos6502) {
+        todo!();
+    }
+
     fn immediate(self, cpu: &mut Mos6502) {
-        cpu.queue_task(MicrocodeTask::Read(|cpu, mapper| {
+        cpu.queue_read(|cpu, mapper| {
             let data = Mos6502::read_pc_increment(cpu, mapper);
             println!("{} #${:02X}", OPCODES[cpu.opcode as usize], data);
             data
-        }, self));
+        }, self);
     }
 
     fn implied(self, cpu: &mut Mos6502) {
-        cpu.queue_task(MicrocodeTask::Read(|cpu, mapper| {
+        cpu.queue_read(|cpu, mapper| {
             let data = Mos6502::read_pc(cpu, mapper);
             println!("{}", OPCODES[cpu.opcode as usize]);
             data
-        }, self));
+        }, self);
     }
 
     fn indirect_indexed_y(self, cpu: &mut Mos6502) {
@@ -115,6 +120,10 @@ impl AddressingModes for MicrocodeWriteOperation {
             Mos6502::write_address(cpu, mapper, data);
             println!("{} ${:04X}", OPCODES[cpu.opcode as usize], cpu.address);
         }, self);
+    }
+
+    fn accumulator(self, cpu: &mut Mos6502) {
+        todo!()
     }
 
     fn immediate(self, cpu: &mut Mos6502) {
@@ -160,6 +169,17 @@ impl AddressingModes for MicrocodeReadWriteOperation {
         todo!()
     }
 
+    fn accumulator(self, cpu: &mut Mos6502) {
+        cpu.queue_read_write(|cpu| cpu.a, |cpu, mapper, data| {
+            cpu.a = data;
+            println!("{} A", OPCODES[cpu.opcode as usize]);
+        }, self);
+        //     let data = Mos6502::read_pc(cpu, mapper);
+        //     println!("{} A", OPCODES[cpu.opcode as usize]);
+        //     data
+        // }, self));
+    }
+
     fn immediate(self, cpu: &mut Mos6502) {
         todo!()
     }
@@ -175,7 +195,7 @@ impl AddressingModes for MicrocodeReadWriteOperation {
     fn zero_page(self, cpu: &mut Mos6502) {
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_zero_page_address);
         cpu.queue_read(Mos6502::read_address, Mos6502::set_scratch);
-        cpu.queue_read_write(|cpu, mapper, data| {
+        cpu.queue_read_write(|cpu| cpu.scratch, |cpu, mapper, data| {
             mapper.write(cpu.address, cpu.scratch);
             cpu.scratch = data;
         }, self);
