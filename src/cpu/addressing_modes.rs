@@ -1,9 +1,15 @@
+
+use std::{ops::Add, cmp::Ordering};
+
 use crate::{roms::Mapper, address::Address};
 
 use super::{Mos6502, MicrocodeTask};
 
+pub type MicrocodeBranchOperation = fn(&mut Mos6502) -> bool;
+pub type MicrocodeConditionalOperation = fn(&mut Mos6502, data :u8, condition_met: bool);
 pub type MicrocodeReadOperation = fn(&mut Mos6502, data: u8);
 pub type MicrocodeWriteOperation = fn(&mut Mos6502) -> u8;
+
 
 const OPCODES: [&'static str; 256] = [
     "BRK","ORA","STP","SLO","NOP","ORA","ASL","SLO","PHP","ORA","ASL","ANC","NOP","ORA","ASL","SLO",
@@ -22,6 +28,90 @@ const OPCODES: [&'static str; 256] = [
     "BNE","CMP","STP","DCP","NOP","CMP","DEC","DCP","CLD","CMP","NOP","DCP","NOP","CMP","DEC","DCP",
     "CPX","SBC","NOP","ISC","CPX","SBC","INC","ISC","INX","SBC","NOP","SBC","CPX","SBC","INC","ISC",
     "BEQ","SBC","STP","ISC","NOP","SBC","INC","ISC","SED","SBC","NOP","ISC","NOP","SBC","INC","ISC"];
+
+pub trait BranchAddressingModes {
+    fn relative(self,  cpu: &mut Mos6502);
+}
+
+impl BranchAddressingModes for MicrocodeBranchOperation {
+    fn relative(self,  cpu: &mut Mos6502) {
+        cpu.queue_branch(Mos6502::read_pc_increment, self, |cpu, data, condition_met| {
+            cpu.pointer = data;
+            if condition_met {
+                cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| {
+                    let (low, carry) = cpu.pc.get_low().overflowing_add_signed(data as i8);
+                    cpu.pc.set_low(low);
+
+                    if carry {
+                        cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| {
+                            let high = match (cpu.pointer as i8).cmp(&0) {
+                                Ordering::Less => cpu.pc.get_high() - 1,
+                                Ordering::Equal | Ordering::Greater => cpu.pc.get_high() + 1,
+                            };
+                            cpu.pc.set_high(high);
+                            println!("{} ${:04X}", OPCODES[cpu.opcode as usize], cpu.pc);
+                        });
+                    } else {
+                        println!("{} ${:04X}", OPCODES[cpu.opcode as usize], cpu.pc);
+                    }
+                });
+                println!("{} ${:04X}", OPCODES[cpu.opcode as usize], cpu.pc);
+                //todo!("Figure out this fucking overflow scenario with a u8 + i8");
+                // cpu.address_carry = carry;
+
+                // if carry {
+                //     cpu.queue_read(Mos6502::read_pc_increment, |c, data| {
+                //         let high = c.pc.get_high();
+                //     });
+                // }
+            } else {
+                println!("{}!!", OPCODES[cpu.opcode as usize]);
+            }
+        });
+        // cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| {
+        //     cpu.pointer = data;
+
+        //     if()
+        // });
+        // cpu.queue_branch(Mos6502::read_pc_increment, self, |cpu, condition_met| {
+        //     if condition_met {
+        //         let (low, carry) = cpu.pc.get_low().overflowing_add(cpu.pointer);
+        //         cpu.pc.set_low(low);
+        //         cpu.address_carry = carry;
+        //     }
+        // });
+        // cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| {
+        //     cpu.pointer = data;
+        // });
+
+    //     Relative addressing (BCC, BCS, BNE, BEQ, BPL, BMI, BVC, BVS)
+
+    //     #   address  R/W description
+    //    --- --------- --- ---------------------------------------------
+    //     1     PC      R  fetch opcode, increment PC
+    //     2     PC      R  fetch operand, increment PC
+    //     3     PC      R  Fetch opcode of next instruction,
+    //                      If branch is taken, add operand to PCL.
+    //                      Otherwise increment PC.
+    //     4+    PC*     R  Fetch opcode of next instruction.
+    //                      Fix PCH. If it did not change, increment PC.
+    //     5!    PC      R  Fetch opcode of next instruction,
+    //                      increment PC.
+
+    //    Notes: The opcode fetch of the next instruction is included to
+    //           this diagram for illustration purposes. When determining
+    //           real execution times, remember to subtract the last
+    //           cycle.
+
+    //           * The high byte of Program Counter (PCH) may be invalid
+    //             at this time, i.e. it may be smaller or bigger by $100.
+
+    //           + If branch is taken, this cycle will be executed.
+
+    //           ! If branch occurs to different page, this cycle will be
+    //             executed.
+    }
+}
 
 pub trait AddressingModes {
     fn absolute(self, cpu: &mut Mos6502);

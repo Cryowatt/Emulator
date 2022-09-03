@@ -1,3 +1,4 @@
+#![feature(mixed_integer_ops)]
 pub mod apu;
 pub mod address;
 pub mod bus;

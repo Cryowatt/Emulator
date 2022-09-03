@@ -6,16 +6,16 @@ pub trait MOS6502Instructions {
     fn adc(&mut self, data: u8);
     fn and(&mut self, data: u8);
     fn asl(&mut self, data: u8);
-    fn bcc(&mut self, data: u8);
-    fn bcs(&mut self, data: u8);
-    fn beq(&mut self, data: u8);
+    fn bcc(&mut self) -> bool;
+    fn bcs(&mut self) -> bool;
+    fn beq(&mut self) -> bool;
     fn bit(&mut self, data: u8);
-    fn bmi(&mut self, data: u8);
-    fn bne(&mut self, data: u8);
-    fn bpl(&mut self, data: u8);
+    fn bmi(&mut self) -> bool;
+    fn bne(&mut self) -> bool;
+    fn bpl(&mut self) -> bool;
     fn brk(&mut self);
-    fn bvc(&mut self, data: u8);
-    fn bvs(&mut self, data: u8);
+    fn bvc(&mut self) -> bool;
+    fn bvs(&mut self) -> bool;
     fn clc(&mut self, data: u8);
     fn cld(&mut self, data: u8);
     fn cli(&mut self, data: u8);
@@ -74,15 +74,15 @@ impl MOS6502Instructions for Mos6502 {
         todo!()
     }
 
-    fn bcc(&mut self, data: u8) {
+    fn bcc(&mut self) -> bool {
         todo!()
     }
 
-    fn bcs(&mut self, data: u8) {
+    fn bcs(&mut self) -> bool {
         todo!()
     }
 
-    fn beq(&mut self, data: u8) {
+    fn beq(&mut self) -> bool {
         todo!()
     }
 
@@ -90,15 +90,15 @@ impl MOS6502Instructions for Mos6502 {
         todo!()
     }
 
-    fn bmi(&mut self, data: u8) {
+    fn bmi(&mut self) -> bool {
         todo!()
     }
 
-    fn bne(&mut self, data: u8) {
-        todo!()
+    fn bne(&mut self) -> bool {
+        self.p.contains(Status::ZERO)
     }
 
-    fn bpl(&mut self, data: u8) {
+    fn bpl(&mut self) -> bool {
         todo!()
     }
 
@@ -115,11 +115,11 @@ impl MOS6502Instructions for Mos6502 {
         });
     }
 
-    fn bvc(&mut self, data: u8) {
+    fn bvc(&mut self) -> bool {
         todo!()
     }
 
-    fn bvs(&mut self, data: u8) {
+    fn bvs(&mut self) -> bool {
         todo!()
     }
 
@@ -171,14 +171,16 @@ impl MOS6502Instructions for Mos6502 {
         todo!()
     }
 
-    fn inx(&mut self, data: u8) {
+    fn inx(&mut self, _: u8) {
         self.x = self.x.wrapping_add(1);
         self.set_zero_flag(self.x);
         self.set_negative_flag(self.x);
     }
 
-    fn iny(&mut self, data: u8) {
-        todo!()
+    fn iny(&mut self, _: u8) {
+        self.y = self.y.wrapping_add(1);
+        self.set_zero_flag(self.y);
+        self.set_negative_flag(self.y);
     }
 
     fn jmp(&mut self) {

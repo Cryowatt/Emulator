@@ -7,10 +7,12 @@ use bitflags::bitflags;
 
 use crate::{roms::Mapper, address::Address};
 
+use self::addressing_modes::*;
 pub use self::{addressing_modes::{AddressingModes, MicrocodeReadOperation, MicrocodeWriteOperation}, instructions::MOS6502Instructions};
 
 enum MicrocodeTask {
     Read(BusRead, MicrocodeReadOperation),
+    Branch(BusRead, MicrocodeBranchOperation, MicrocodeConditionalOperation),
     Write(BusWrite, MicrocodeWriteOperation),
 }
 
@@ -75,6 +77,10 @@ impl Mos6502 {
 
     fn queue_read(self: &mut Self, io_op: BusRead, op: MicrocodeReadOperation) {
         self.cycle_microcode_queue.push_back(MicrocodeTask::Read(io_op, op));
+    }
+
+    fn queue_branch(self: &mut Self, io_op: BusRead, branch_op: MicrocodeBranchOperation, op: MicrocodeConditionalOperation) {
+        self.cycle_microcode_queue.push_back(MicrocodeTask::Branch(io_op, branch_op, op));
     }
 
     fn queue_write(self: &mut Self, io_op: BusWrite, op: MicrocodeWriteOperation) {
@@ -172,6 +178,11 @@ impl RP2A03 for Mos6502 {
             MicrocodeTask::Write(write, op) => {
                 let data = op(self);
                 write(self, mapper, data);
+            },
+            MicrocodeTask::Branch(read, branch_op, op) => {
+                let data = read(self, mapper);
+                let conditional = branch_op(self);
+                op(self, data, conditional);
             }
         }
     }
@@ -187,6 +198,8 @@ impl RP2A03 for Mos6502 {
             0x78 => (Self::sei as MicrocodeReadOperation).implied(self),
             0x84 => (Self::sty as MicrocodeWriteOperation).zero_page(self),
             0xa0 => (Self::ldy as MicrocodeReadOperation).immediate(self),
+            0xc8 => (Self::iny as MicrocodeReadOperation).implied(self),
+            0xd0 => (Self::bne as MicrocodeBranchOperation).relative(self),
             0xd8 => (Self::cld as MicrocodeReadOperation).implied(self),
             0xe8 => (Self::inx as MicrocodeReadOperation).implied(self),
             //01/05/09/0d/11/15/19/1d
