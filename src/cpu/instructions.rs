@@ -27,7 +27,7 @@ pub trait MOS6502Instructions {
     fn dex(&mut self, data: u8);
     fn dey(&mut self, data: u8);
     fn eor(&mut self, data: u8);
-    fn inc(&mut self, data: u8);
+    fn inc(&mut self, data: u8) -> u8;
     fn inx(&mut self, data: u8);
     fn iny(&mut self, data: u8);
     fn jmp(&mut self);
@@ -167,8 +167,12 @@ impl MOS6502Instructions for Mos6502 {
         todo!()
     }
 
-    fn inc(&mut self, data: u8) {
-        todo!()
+    fn inc(&mut self, data: u8) -> u8 {
+        // no overflow on inc? huh
+        let (result, carry) = data.overflowing_add(1);
+        self.set_zero_flag(result);
+        self.set_negative_flag(result);
+        result
     }
 
     fn inx(&mut self, _: u8) {
