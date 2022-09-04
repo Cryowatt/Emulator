@@ -101,7 +101,8 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn bit(&mut self, data: u8) {
-        todo!()
+        let result = self.a & data;
+        self.p.insert(Status::from_bits_truncate(result).intersection(Status::OVERFLOW | Status::NEGATIVE));
     }
 
     fn bmi(&mut self) -> bool {

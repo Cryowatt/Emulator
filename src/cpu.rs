@@ -248,6 +248,7 @@ impl RP2A03 for Mos6502 {
             //00/04/08/0c/10/14/18/1c
             0x00 => self.brk(),
             0x20 => self.jsr(),
+            0x2c => (Self::bit as MicrocodeReadOperation).absolute(self),
             0x4c => self.jmp(),
             0x60 => self.rts(),
             0x78 => (Self::sei as MicrocodeReadOperation).implied(self),

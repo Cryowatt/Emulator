@@ -82,7 +82,13 @@ pub trait AddressingModes {
 
 impl AddressingModes for MicrocodeReadOperation {
     fn absolute(self, cpu: &mut Mos6502) {
-        todo!();
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_high);
+        cpu.queue_read_microcode(Mos6502::read_address, self, |cpu, io, op| {
+            let data = io(cpu);
+            op(cpu, data);
+            println!("{} ${:04X}", OPCODES[cpu.opcode as usize], cpu.address);
+        });
     }
 
     fn absolute_indexed_x(self, cpu: &mut Mos6502) {
