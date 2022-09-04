@@ -7,19 +7,19 @@ use bitflags::bitflags;
 
 use crate::{roms::Mapper, address::Address};
 
-use self::addressing_modes::*;
+use self::{addressing_modes::*, instructions::{ReadOperation, WriteOperation, BranchOperation, ReadWriteOperation}};
 pub use self::{addressing_modes::{AddressingModes, MicrocodeReadOperation, MicrocodeWriteOperation}, instructions::MOS6502Instructions};
 
 enum MicrocodeTask {
-    Branch(BusRead, MicrocodeBranchOperation, MicrocodeConditionalOperation),
-    Read(BusRead, MicrocodeReadOperation),
-    Write(BusWrite, MicrocodeWriteOperation),
-    ReadWrite(GetInput, BusWrite, MicrocodeReadWriteOperation),
+    Branch(BusRead, BranchOperation, Microcode<BusRead, BranchOperation>),
+    Read(BusRead, ReadOperation, Microcode<BusRead, ReadOperation>),
+    Write(BusWrite, WriteOperation, Microcode<BusWrite, WriteOperation>),
+    ReadWrite(BusWrite, ReadWriteOperation, Microcode<BusWrite, ReadWriteOperation>),
 }
 
 type GetInput = fn(&mut Mos6502) -> u8;
-type BusRead = fn(&mut Mos6502, &mut dyn Mapper) -> u8;
-type BusWrite = fn(&mut Mos6502, &mut dyn Mapper, data: u8);
+type BusRead = fn(&mut Mos6502) -> u8;
+type BusWrite = fn(&mut Mos6502, data: u8);
 const STACK_OFFSET: u16 = 0x0100;
 
 bitflags! {
@@ -47,16 +47,19 @@ pub struct Mos6502 {
     pub y: u8,
 
     opcode: u8,
+    operand: u8,
     address: u16,
+    data: u8,
     address_carry: bool,
     pointer: u8,
     scratch: u8,
+    mapper: Box<dyn Mapper>,
 
     cycle_microcode_queue: VecDeque<MicrocodeTask>,
 }
 
 impl Mos6502 {
-    pub fn new() -> Self {
+    pub fn new(mapper: Box<dyn Mapper>) -> Self {
         Self {
             a: 0x00,
             pc: 0xfffc,
@@ -66,10 +69,13 @@ impl Mos6502 {
             y: 0x00,
 
             opcode: 0x00,
+            operand: 0x00,
             address: 0x0000,
+            data: 0x00,
             address_carry: false,
             pointer: 0x00,
             scratch: 0x00,
+            mapper,
 
             cycle_microcode_queue: VecDeque::with_capacity(8),
         }
@@ -79,57 +85,77 @@ impl Mos6502 {
         self.cycle_microcode_queue.push_back(task);
     }
 
-    fn queue_branch(self: &mut Self, io_op: BusRead, branch_op: MicrocodeBranchOperation, op: MicrocodeConditionalOperation) {
-        self.cycle_microcode_queue.push_back(MicrocodeTask::Branch(io_op, branch_op, op));
+    fn queue_branch_microcode(&mut self, io: BusRead, op: BranchOperation, microcode: Microcode<BusRead, BranchOperation>) {
+        self.cycle_microcode_queue.push_back(MicrocodeTask::Branch(io, op, microcode));
     }
 
-    fn queue_read(self: &mut Self, io_op: BusRead, op: MicrocodeReadOperation) {
-        self.cycle_microcode_queue.push_back(MicrocodeTask::Read(io_op, op));
+    fn queue_read(&mut self, io: BusRead, op: ReadOperation)
+    {
+        self.queue_read_microcode(io, op, |cpu, io, op| {
+            let data = io(cpu);
+            op(cpu, data)
+        });
     }
 
-    fn queue_write(self: &mut Self, io_op: BusWrite, op: MicrocodeWriteOperation) {
-        self.cycle_microcode_queue.push_back(MicrocodeTask::Write(io_op, op));
+    fn queue_read_microcode(&mut self, io: BusRead, op: ReadOperation, microcode: Microcode<BusRead, ReadOperation>)
+    {
+        self.cycle_microcode_queue.push_back(MicrocodeTask::Read(io, op, microcode));
     }
 
-    fn queue_read_write(self: &mut Self, get_input: GetInput, io_op: BusWrite, op: MicrocodeReadWriteOperation) {
-        self.cycle_microcode_queue.push_back(MicrocodeTask::ReadWrite(get_input, io_op, op));
+    fn queue_write(&mut self, io: BusWrite, op: WriteOperation) {
+        self.queue_write_microcode(io, op, |cpu, io, op| {
+            let data = op(cpu);
+            io(cpu, data)
+        });
     }
 
-    fn read_address(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
-        mapper.read(cpu.address)
+    fn queue_write_microcode(&mut self, io: BusWrite, op: WriteOperation, microcode: Microcode<BusWrite, WriteOperation>) {
+        self.cycle_microcode_queue.push_back(MicrocodeTask::Write(io, op, microcode));
     }
 
-    fn read_pc_increment(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
-        let data = Self::read_pc(cpu, mapper);
-        cpu.pc += 1; 
+    fn queue_read_write(self: &mut Self, io: BusWrite, op: ReadWriteOperation, microcode: Microcode<BusWrite, ReadWriteOperation>) {
+        self.cycle_microcode_queue.push_back(MicrocodeTask::ReadWrite(io, op, microcode));
+    }
+
+    fn queue_read_write_microcode(&mut self, io: BusWrite, op: ReadWriteOperation, microcode: Microcode<BusWrite, ReadWriteOperation>) {
+        self.cycle_microcode_queue.push_back(MicrocodeTask::ReadWrite(io, op, microcode));
+    }
+
+    fn read_address(&mut self) -> u8 {
+        self.mapper.read(self.address)
+    }
+
+    fn read_pc_increment(&mut self) -> u8 {
+        let data = self.read_pc();
+        self.pc += 1; 
         data
     }
 
-    fn read_pc(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
-        mapper.read(cpu.pc)
+    fn read_pc(&mut self) -> u8 {
+        self.mapper.read(self.pc)
     }
 
-    fn read_pointer(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
-        mapper.read(cpu.pointer as u16)
+    fn read_pointer(&mut self) -> u8 {
+        self.mapper.read(self.pointer as u16)
     }
 
-    fn read_pointer_increment(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
-        let data = Self::read_pointer(cpu, mapper);
-        cpu.pointer += 1;
+    fn read_pointer_increment(&mut self) -> u8 {
+        let data = self.read_pointer();
+        self.pointer += 1;
         data
     }
 
-    fn read_fixed<const ADDRESS: u16>(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
-        mapper.read(ADDRESS)
+    pub fn read_fixed<const ADDRESS: u16>(&mut self) -> u8 {
+        self.mapper.read(ADDRESS)
     }
 
-    fn read_stack(cpu: &mut Self, mapper: &mut dyn Mapper) -> u8 {
-        mapper.read(STACK_OFFSET + cpu.s as u16)
+    fn read_stack(&mut self) -> u8 {
+        self.mapper.read(STACK_OFFSET + self.s as u16)
     }
 
-    fn push_stack(cpu: &mut Self, mapper: &mut dyn Mapper, data: u8) {
-        mapper.write((cpu.s & 0xff) as u16 + STACK_OFFSET, data);
-        cpu.s -= 1;
+    fn push_stack(&mut self, data: u8) {
+        self.mapper.write((self.s & 0xff) as u16 + STACK_OFFSET, data);
+        self.s -= 1;
     }
 
     fn set_scratch(&mut self, data: u8) {
@@ -148,8 +174,16 @@ impl Mos6502 {
         self.address.set_high(data);
     }
 
-    fn write_address(cpu: &mut Self, mapper: &mut dyn Mapper, data: u8) {
-        mapper.write(cpu.address, data);
+    fn set_pc_low(&mut self, data: u8) {
+        self.pc.set_low(data);
+    }
+
+    fn set_pc_high(&mut self, data: u8) {
+        self.pc.set_high(data);
+    }
+
+    fn write_address(&mut self, data: u8) {
+        self.mapper.write(self.address, data);
     }
 
     fn set_negative_flag(&mut self, data: u8) {
@@ -162,45 +196,31 @@ impl Mos6502 {
 }
 
 pub trait RP2A03 {
-    fn zero_page_indexed();
-
     fn reset(self: &mut Self);
 
-    fn cycle(self: &mut Self, mapper: &mut dyn Mapper);
+    fn cycle(&mut self);
 
     fn decode_opcode(self: &mut Self, opcode: u8);
 }
 
 impl RP2A03 for Mos6502 {
-    fn zero_page_indexed() {}
-
-    fn cycle(self: &mut Self, mapper: &mut dyn Mapper) {
+    fn cycle(&mut self) {
         let microcode = match self.cycle_microcode_queue.pop_front() {
             Some(microcode) => microcode,
             None => {
-                MicrocodeTask::Read(Self::read_pc_increment, Self::decode_opcode)
+                MicrocodeTask::Read(Self::read_pc_increment, Self::decode_opcode, 
+                    |cpu, io, op| {
+                        let data = io(cpu);
+                        op(cpu, data)
+                    })
             },
         };
         
         match microcode {
-            MicrocodeTask::Branch(read, branch_op, op) => {
-                let data = read(self, mapper);
-                let conditional = branch_op(self);
-                op(self, data, conditional);
-            },
-            MicrocodeTask::Read(read, op) => {
-                let data = read(self, mapper);
-                op(self, data);
-            },
-            MicrocodeTask::Write(write, op) => {
-                let data = op(self);
-                write(self, mapper, data);
-            },
-            MicrocodeTask::ReadWrite(get_input, write, op) => {
-                let input = get_input(self);
-                let data = op(self, input);
-                write(self, mapper, data);
-            },
+            MicrocodeTask::Branch(io, op, microcode) =>  microcode(self, io, op),
+            MicrocodeTask::Read(io, op, microcode) => microcode(self, io, op),
+            MicrocodeTask::Write(io, op, microcode) => microcode(self, io, op),
+            MicrocodeTask::ReadWrite(io, op, microcode) => microcode(self, io, op),
         }
     }
 
@@ -243,11 +263,7 @@ impl RP2A03 for Mos6502 {
     }
 
     fn reset(self: &mut Self) {
-        self.cycle_microcode_queue.push_back(MicrocodeTask::Read(
-            |cpu, mapper| mapper.read(0xfffc),
-            |cpu, data| cpu.pc.set_low(data)));
-        self.cycle_microcode_queue.push_back(MicrocodeTask::Read(
-            |cpu, mapper| mapper.read(0xfffd),
-            |cpu, data| cpu.pc.set_high(data)));
+        self.queue_read(Self::read_fixed::<0xfffc>, Self::set_pc_low);
+        self.queue_read(Self::read_fixed::<0xfffd>, Self::set_pc_high);
     }
 }

@@ -11,8 +11,8 @@ use crate::ppu::PPU;
 use crate::ram::RAM;
 
 pub struct ConsoleSystem {
-    cpu: Mos6502,
-    pub mapper: Box<dyn Mapper>,
+    pub cpu: Mos6502,
+    //pub mapper: Box<dyn Mapper>,
 }
 
 pub struct ConsoleDevices {
@@ -46,7 +46,7 @@ impl ConsoleSystem {
         // let mut ram = Box::new(RAM::<0x800>::new());
         // let fk: &mut dyn BusDevice = ram.as_mut();
 
-        ConsoleSystem { cpu: Mos6502::new(), mapper }
+        ConsoleSystem { cpu: Mos6502::new(mapper) }
     }
 
     pub fn reset(self: &mut Self) {
@@ -54,6 +54,6 @@ impl ConsoleSystem {
     }
 
     pub fn cycle(self: &mut Self) {
-        self.cpu.cycle(self.mapper.as_mut());
+        self.cpu.cycle();
     }
 }

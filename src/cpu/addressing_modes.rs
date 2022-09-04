@@ -11,6 +11,8 @@ pub type MicrocodeReadOperation = fn(&mut Mos6502, data: u8);
 pub type MicrocodeWriteOperation = fn(&mut Mos6502) -> u8;
 pub type MicrocodeReadWriteOperation = fn(&mut Mos6502, data: u8) -> u8;
 
+pub type Microcode<TIo, TOp> = fn(&mut Mos6502, io: TIo, op: TOp);
+
 
 const OPCODES: [&'static str; 256] = [
     "BRK","ORA","STP","SLO","NOP","ORA","ASL","SLO","PHP","ORA","ASL","ANC","NOP","ORA","ASL","SLO",
@@ -36,16 +38,17 @@ pub trait BranchAddressingModes {
 
 impl BranchAddressingModes for MicrocodeBranchOperation {
     fn relative(self,  cpu: &mut Mos6502) {
-        cpu.queue_branch(Mos6502::read_pc_increment, self, |cpu, data, condition_met| {
-            cpu.pointer = data;
-            if condition_met {
-                cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| {
-                    let (low, carry) = cpu.pc.get_low().overflowing_add_signed(data as i8);
+        cpu.queue_branch_microcode(Mos6502::read_pc_increment, self, |cpu, io, op| {
+            cpu.operand = io(cpu);
+            let should_branch = op(cpu);
+            if should_branch {
+                cpu.queue_read(Mos6502::read_pc_increment, |cpu, _| {
+                    let (low, carry) = cpu.pc.get_low().overflowing_add_signed(cpu.operand as i8);
                     cpu.pc.set_low(low);
 
                     if carry {
-                        cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| {
-                            let high = match (cpu.pointer as i8).cmp(&0) {
+                        cpu.queue_read(Mos6502::read_pc_increment, |cpu, _| {
+                            let high = match (cpu.operand as i8).cmp(&0) {
                                 Ordering::Less => cpu.pc.get_high() - 1,
                                 Ordering::Equal | Ordering::Greater => cpu.pc.get_high() + 1,
                             };
@@ -83,19 +86,19 @@ impl AddressingModes for MicrocodeReadOperation {
     }
 
     fn immediate(self, cpu: &mut Mos6502) {
-        cpu.queue_read(|cpu, mapper| {
-            let data = Mos6502::read_pc_increment(cpu, mapper);
+        cpu.queue_read_microcode(Mos6502::read_pc_increment, self, |cpu, io, op| {
+            let data = io(cpu);
+            op(cpu, data);
             println!("{} #${:02X}", OPCODES[cpu.opcode as usize], data);
-            data
-        }, self);
+        });
     }
 
     fn implied(self, cpu: &mut Mos6502) {
-        cpu.queue_read(|cpu, mapper| {
-            let data = Mos6502::read_pc(cpu, mapper);
+        cpu.queue_read_microcode(Mos6502::read_pc, self, |cpu, io, op| {
+            let data = io(cpu);
+            op(cpu, data);
             println!("{}", OPCODES[cpu.opcode as usize]);
-            data
-        }, self);
+        });
     }
 
     fn indirect_indexed_y(self, cpu: &mut Mos6502) {
@@ -104,11 +107,11 @@ impl AddressingModes for MicrocodeReadOperation {
 
     fn zero_page(self, cpu: &mut Mos6502) {
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_zero_page_address);
-        cpu.queue_read(|cpu, mapper| {
-            let data = Mos6502::read_address(cpu, mapper);
+        cpu.queue_read_microcode(Mos6502::read_address, self, |cpu, io, op| {
+            let data = io(cpu);
+            op(cpu, data);
             println!("{} ${:02X}", OPCODES[cpu.opcode as usize], cpu.address);
-            data
-        }, self);
+        });
     }
 }
 
@@ -116,10 +119,11 @@ impl AddressingModes for MicrocodeWriteOperation {
     fn absolute(self, cpu: &mut Mos6502) {
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_high);
-        cpu.queue_write(|cpu, mapper, data| {
-            Mos6502::write_address(cpu, mapper, data);
+        cpu.queue_write_microcode(Mos6502::write_address, self, |cpu, io, op| {
+            let data = op(cpu);
+            io(cpu, data);
             println!("{} ${:04X}", OPCODES[cpu.opcode as usize], cpu.address);
-        }, self);
+        });
     }
 
     fn accumulator(self, cpu: &mut Mos6502) {
@@ -149,18 +153,20 @@ impl AddressingModes for MicrocodeWriteOperation {
                 cpu.address.set_high(high);
             }
         });
-        cpu.queue_write(|cpu, mapper, data| {
-            Mos6502::write_address(cpu, mapper, data);
+        cpu.queue_write_microcode(Mos6502::write_address, self, |cpu, io, op| {
+            let data = op(cpu);
+            io(cpu, data);
             println!("{} (${:02X}),Y", OPCODES[cpu.opcode as usize], cpu.pointer);
-        }, self);
+        });
     }
 
     fn zero_page(self, cpu: &mut Mos6502) {
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_zero_page_address);
-        cpu.queue_write(|cpu, mapper, data| {
-            Mos6502::write_address(cpu, mapper, data);
+        cpu.queue_write_microcode(Mos6502::write_address, self, |cpu, io, op| {
+            let data = op(cpu);
+            io(cpu, data);
             println!("{} ${:02X}", OPCODES[cpu.opcode as usize], cpu.address);
-        }, self);
+        });
     }
 }
 
@@ -170,10 +176,11 @@ impl AddressingModes for MicrocodeReadWriteOperation {
     }
 
     fn accumulator(self, cpu: &mut Mos6502) {
-        cpu.queue_read_write(|cpu| cpu.a, |cpu, mapper, data| {
-            cpu.a = data;
-            println!("{} A", OPCODES[cpu.opcode as usize]);
-        }, self);
+        todo!();
+        // cpu.queue_read_write(|cpu| cpu.a, |cpu, mapper, data| {
+        //     cpu.a = data;
+        //     println!("{} A", OPCODES[cpu.opcode as usize]);
+        // }, self);
         //     let data = Mos6502::read_pc(cpu, mapper);
         //     println!("{} A", OPCODES[cpu.opcode as usize]);
         //     data
@@ -194,14 +201,15 @@ impl AddressingModes for MicrocodeReadWriteOperation {
 
     fn zero_page(self, cpu: &mut Mos6502) {
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_zero_page_address);
-        cpu.queue_read(Mos6502::read_address, Mos6502::set_scratch);
-        cpu.queue_read_write(|cpu| cpu.scratch, |cpu, mapper, data| {
-            mapper.write(cpu.address, cpu.scratch);
-            cpu.scratch = data;
-        }, self);
-        cpu.queue_write(|cpu, mapper, data| {
-            Mos6502::write_address(cpu, mapper, data);
+        cpu.queue_read(Mos6502::read_address, |cpu, data| cpu.operand = data);
+        cpu.queue_read_write_microcode(Mos6502::write_address, self, |cpu, io, op| {
+            io(cpu, cpu.data);
+            cpu.data = op(cpu, cpu.operand);
+        });
+        cpu.queue_write_microcode(Mos6502::write_address, |cpu| cpu.data, |cpu, io, op| {
+            let data = op(cpu);
+            io(cpu, data);
             println!("{} ${:02X}", OPCODES[cpu.opcode as usize], cpu.address);
-        }, |cpu| cpu.scratch);
+        });
     }
 }

@@ -4,6 +4,11 @@ use crate::address::Address;
 
 use super::{Mos6502, Status};
 
+pub type BranchOperation = fn(&mut Mos6502) -> bool;
+pub type ReadOperation = fn(&mut Mos6502, data: u8);
+pub type WriteOperation = fn(&mut Mos6502) -> u8;
+pub type ReadWriteOperation = fn(&mut Mos6502, data: u8) -> u8;
+
 pub trait MOS6502Instructions {
     fn adc(&mut self, data: u8);
     fn and(&mut self, data: u8);
@@ -206,7 +211,7 @@ impl MOS6502Instructions for Mos6502 {
 
     fn jsr(&mut self) {
         self.queue_read(Self::read_pc_increment, |cpu, data| cpu.address.set_low(data));
-        self.queue_read(Self::read_stack, |cpu, data| ());
+        self.queue_read(Self::read_stack, Self::nop);
         self.queue_write(Self::push_stack, |cpu| cpu.pc.get_high());
         self.queue_write(Self::push_stack, |cpu| cpu.pc.get_low());
         self.queue_read(Self::read_pc, |cpu, data| {
@@ -238,9 +243,7 @@ impl MOS6502Instructions for Mos6502 {
         todo!()
     }
 
-    fn nop(&mut self, data: u8) {
-        todo!()
-    }
+    fn nop(&mut self, _: u8) {}
 
     fn ora(&mut self, data: u8) {
         todo!()

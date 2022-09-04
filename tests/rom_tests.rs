@@ -20,19 +20,19 @@ fn basics() {
     system.reset();
 
     // Test rom init cycles
-    while system.mapper.read(0x6000) != 0x80 {
+    while system.cpu.read_fixed::<0x6000>() != 0x80 {
         system.cycle();
     }
 
     // Run tests
-    while system.mapper.read(0x6000) == 0x80 {
+    while system.cpu.read_fixed::<0x6000>() == 0x80 {
         system.cycle();
     }
 
-    assert_eq!(system.mapper.read(0x6000), 0x00);
-    assert_eq!(system.mapper.read(0x6001), 0xde);
-    assert_eq!(system.mapper.read(0x6002), 0xb0);
-    assert_eq!(system.mapper.read(0x6003), 0x61);
+    assert_eq!(system.cpu.read_fixed::<0x6000>(), 0x00);
+    assert_eq!(system.cpu.read_fixed::<0x6001>(), 0xde);
+    assert_eq!(system.cpu.read_fixed::<0x6002>(), 0xb0);
+    assert_eq!(system.cpu.read_fixed::<0x6003>(), 0x61);
     
     // Assert.AreEqual(0xDE, platform.Read(new Address(0x6001)));
     // Assert.AreEqual(0xB0, platform.Read(new Address(0x6002)));
