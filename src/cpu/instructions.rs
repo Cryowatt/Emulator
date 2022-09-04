@@ -52,7 +52,7 @@ pub trait MOS6502Instructions {
     fn rol(&mut self, data: u8);
     fn ror(&mut self, data: u8);
     fn rti(&mut self, data: u8);
-    fn rts(&mut self, data: u8);
+    fn rts(&mut self);
     fn sbc(&mut self, data: u8);
     fn sec(&mut self, data: u8);
     fn sed(&mut self, data: u8);
@@ -170,7 +170,9 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn dex(&mut self, data: u8) {
-        todo!()
+        self.x = self.x.wrapping_add(0xff);
+        self.set_zero_flag(self.x);
+        self.set_negative_flag(self.x);
     }
 
     fn dey(&mut self, data: u8) {
@@ -277,8 +279,12 @@ impl MOS6502Instructions for Mos6502 {
         todo!()
     }
 
-    fn rts(&mut self, data: u8) {
-        todo!()
+    fn rts(&mut self) {
+        self.queue_read(Self::read_pc, Self::nop);
+        self.queue_read(Self::pop_stack, Self::nop);
+        self.queue_read(Self::pop_stack, Self::set_pc_low);
+        self.queue_read(Self::read_stack, Self::set_pc_high);
+        self.queue_read(Self::read_pc_increment, |cpu, data| println!("RTS"));
     }
 
     fn sbc(&mut self, data: u8) {
@@ -318,7 +324,7 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn tsx(&mut self, data: u8) {
-        todo!()
+        self.x = self.s;
     }
 
     fn txa(&mut self, _: u8) {

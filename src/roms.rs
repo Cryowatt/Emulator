@@ -1,6 +1,6 @@
 //#![feature(const_ops)]
 use crate::bus::BusDevice;
-use crate::ram::RAM;
+use crate::memory::{RAM, ROM};
 use crate::system::ConsoleDevices;
 use std::error::Error;
 use bitflags::bitflags;
@@ -172,13 +172,13 @@ impl NROM {
             //image,
             devices,
             program_ram: match image.header.program_ram_size {
-                0 => RAM::<0x2000>::new(0),
-                _ => RAM::<0x2000>::new((image.header.program_ram_size as u16 * 0x4000) - 1),
+                0 => RAM::<0x2000>::new(0x6000, 0),
+                _ => RAM::<0x2000>::new(0x6000, (image.header.program_ram_size as u16 * 0x2000) - 1),
             },
-            program_rom_bank0: ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0x3fff),
+            program_rom_bank0: ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0x8000, 0x3fff),
             program_rom_bank1: match image.header.program_rom_size {
-                1 => ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0x3fff),
-                2 => ROM::<0x4000>::new(&image.program_rom_data[0x4000..0x8000], 0x3fff),
+                1 => ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0xc000, 0x3fff),
+                2 => ROM::<0x4000>::new(&image.program_rom_data[0x4000..0x8000], 0xc000, 0x3fff),
                 _ => panic!("More rom than address space, really weird."),
             },
         }
@@ -198,7 +198,7 @@ impl Mapper for NROM {
             _ => self.program_rom_bank1.read(address),
         };
 
-        println!("${:04X} -> {:02x}", address, data);
+        //println!("${:04X} -> {:02x}", address, data);
         data
      }
 
@@ -213,38 +213,6 @@ impl Mapper for NROM {
             _ => self.program_rom_bank1.write(address, data),
         }
 
-        println!("${:04X} <- {:02x}", address, data);
+        //println!("${:04X} <- {:02x}", address, data);
     }
-}
-
-pub struct ROM<const SIZE: usize> {
-    pub bank: Vec<u8>,
-    mask: u16,
-}
-
-impl<const SIZE: usize> ROM<SIZE> {
-    // pub fn new() -> Self {
-    //     let foo = vec![0, SIZE];
-    //     RAM {
-    //         bank: Box::new([0; SIZE]), 
-    //         mask: SIZE as u16
-    //     }
-    // }
-
-    pub fn new(data: &[u8], mask: u16) -> Self {
-        ROM { 
-            bank: data.to_owned(),
-            mask,
-        }
-    }
-}
-
-impl<const SIZE: usize> BusDevice for ROM<SIZE> {
-    fn read(&self, address: u16) -> u8 {
-        (*self.bank)[(address & self.mask) as usize]
-    }
-
-    fn write(self: &mut Self, address: u16, data: u8) {
-        // Can't write to ROM, so just ignore
-     }
 }

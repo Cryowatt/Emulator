@@ -53,7 +53,7 @@ pub struct Mos6502 {
     address_carry: bool,
     pointer: u8,
     scratch: u8,
-    mapper: Box<dyn Mapper>,
+    pub mapper: Box<dyn Mapper>,
 
     cycle_microcode_queue: VecDeque<MicrocodeTask>,
 }
@@ -121,8 +121,14 @@ impl Mos6502 {
         self.cycle_microcode_queue.push_back(MicrocodeTask::ReadWrite(io, op, microcode));
     }
 
+    pub fn read(&mut self, address: u16) -> u8 {
+        let data = self.mapper.read(address);
+        println!("\tCPU #${:02x} <- ${:04X}", data, address);
+        data
+    }
+
     fn read_address(&mut self) -> u8 {
-        self.mapper.read(self.address)
+        self.read(self.address)
     }
 
     fn read_pc_increment(&mut self) -> u8 {
@@ -132,11 +138,11 @@ impl Mos6502 {
     }
 
     fn read_pc(&mut self) -> u8 {
-        self.mapper.read(self.pc)
+        self.read(self.pc)
     }
 
     fn read_pointer(&mut self) -> u8 {
-        self.mapper.read(self.pointer as u16)
+        self.read(self.pointer as u16)
     }
 
     fn read_pointer_increment(&mut self) -> u8 {
@@ -145,16 +151,22 @@ impl Mos6502 {
         data
     }
 
-    pub fn read_fixed<const ADDRESS: u16>(&mut self) -> u8 {
-        self.mapper.read(ADDRESS)
+    fn read_fixed<const ADDRESS: u16>(&mut self) -> u8 {
+        self.read(ADDRESS)
     }
 
     fn read_stack(&mut self) -> u8 {
-        self.mapper.read(STACK_OFFSET + self.s as u16)
+        self.read(STACK_OFFSET + self.s as u16)
+    }
+
+    fn pop_stack(&mut self) -> u8 {
+        let data = self.read(STACK_OFFSET + self.s as u16);
+        self.s += 1;
+        data
     }
 
     fn push_stack(&mut self, data: u8) {
-        self.mapper.write((self.s & 0xff) as u16 + STACK_OFFSET, data);
+        self.write((self.s & 0xff) as u16 + STACK_OFFSET, data);
         self.s -= 1;
     }
 
@@ -182,8 +194,13 @@ impl Mos6502 {
         self.pc.set_high(data);
     }
 
+    pub fn write(&mut self, address: u16, data: u8) {
+        self.mapper.write(address, data);
+        println!("\tCPU #${:02x} -> ${:04X}", data, address);
+    }
+
     fn write_address(&mut self, data: u8) {
-        self.mapper.write(self.address, data);
+        self.write(self.address, data);
     }
 
     fn set_negative_flag(&mut self, data: u8) {
@@ -232,6 +249,7 @@ impl RP2A03 for Mos6502 {
             0x00 => self.brk(),
             0x20 => self.jsr(),
             0x4c => self.jmp(),
+            0x60 => self.rts(),
             0x78 => (Self::sei as MicrocodeReadOperation).implied(self),
             0x84 => (Self::sty as MicrocodeWriteOperation).zero_page(self),
             0xa0 => (Self::ldy as MicrocodeReadOperation).immediate(self),
@@ -244,6 +262,7 @@ impl RP2A03 for Mos6502 {
             0x8d => (Self::sta as MicrocodeWriteOperation).absolute(self),
             0x91 => (Self::sta as MicrocodeWriteOperation).indirect_indexed_y(self),
             0x95 => (Self::sta as MicrocodeWriteOperation).zero_page_indexed_x(self),
+            0x9d => (Self::sta as MicrocodeWriteOperation).absolute_indexed_x(self),
             0xa9 => (Self::lda as MicrocodeReadOperation).immediate(self),
             //02/06/0a/0e/12/16/1a/1e
             0x0a => (Self::asl as MicrocodeReadWriteOperation).accumulator(self),
@@ -254,6 +273,8 @@ impl RP2A03 for Mos6502 {
             0x9a => (Self::txs as MicrocodeReadOperation).implied(self),
             0xa2 => (Self::ldx as MicrocodeReadOperation).immediate(self),
             0xaa => (Self::tax as MicrocodeReadOperation).implied(self),
+            0xba => (Self::tsx as MicrocodeReadOperation).implied(self),
+            0xca => (Self::dex as MicrocodeReadOperation).implied(self),
             0xe6 => (Self::inc as MicrocodeReadWriteOperation).zero_page(self),
             //03/07/0b/0f/13/17/1b/1f
 

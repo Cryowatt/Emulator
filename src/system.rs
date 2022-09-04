@@ -7,8 +7,7 @@ use crate::bus::MemoryMapper;
 use std::rc::Rc;
 
 use crate::apu::Alu2A03;
-use crate::ppu::PPU;
-use crate::ram::RAM;
+use crate::{memory::RAM, ppu::PPU};
 
 pub struct ConsoleSystem {
     pub cpu: Mos6502,
@@ -24,7 +23,7 @@ pub struct ConsoleDevices {
 impl ConsoleSystem {
     pub fn new(image: RomImage) -> Self {
         let devices = ConsoleDevices {
-            ram: RAM::<0x800>::new(0x2000),
+            ram: RAM::<0x800>::new(0x0, 0x7FF),
             ppu: PPU{},
             alu: Alu2A03 {},
         };
@@ -32,7 +31,7 @@ impl ConsoleSystem {
         let mapper = Mappers::from(image, devices).expect("failed to create mapper");
 
         // let memoryMap: MemoryMapper = |a: u16, devices: &mut ConsoleDevices| match a >> 13 {
-        //     _ => &mut devices.ram, // $0000 - $1FFF RAM
+        //     _ => &mut devices.ram, // 000 - $1FFF RAM
         //                            // 1 => foo.as_mut(), //&PPU{}, // $2000 - $3FFF PPU Reg
         //                            // devices.ram.as_mut(), //&Alu2A03{}, //::new(cart), // $4000 - $5FFF APU/Cart
         //                            // devices.ram.as_mut(), //cart, // $6000 - $7FFF Cart SRAM/RAM

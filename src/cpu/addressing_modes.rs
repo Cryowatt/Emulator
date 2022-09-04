@@ -71,6 +71,7 @@ impl BranchAddressingModes for MicrocodeBranchOperation {
 
 pub trait AddressingModes {
     fn absolute(self, cpu: &mut Mos6502);
+    fn absolute_indexed_x(self, cpu: &mut Mos6502);
     fn accumulator(self, cpu: &mut Mos6502);
     fn immediate(self, cpu: &mut Mos6502);
     fn implied(self, cpu: &mut Mos6502);
@@ -82,6 +83,10 @@ pub trait AddressingModes {
 impl AddressingModes for MicrocodeReadOperation {
     fn absolute(self, cpu: &mut Mos6502) {
         todo!();
+    }
+
+    fn absolute_indexed_x(self, cpu: &mut Mos6502) {
+        todo!()
     }
 
     fn accumulator(self, cpu: &mut Mos6502) {
@@ -131,6 +136,23 @@ impl AddressingModes for MicrocodeWriteOperation {
             io(cpu, data);
             println!("{} ${:04X}", OPCODES[cpu.opcode as usize], cpu.address);
         });
+    }
+
+    fn absolute_indexed_x(self, cpu: &mut Mos6502) {
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
+        cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| {
+            cpu.set_address_high(data);
+            let (low, carry) = cpu.address.get_low().overflowing_add(cpu.x);
+            cpu.set_address_low(low);
+            cpu.address_carry = carry;
+        });
+        cpu.queue_read(Mos6502::read_address, |cpu, data| {
+            if(cpu.address_carry) {
+                let high = cpu.address.get_high();
+                cpu.set_address_high(high + 1);
+            }
+        });
+        cpu.queue_write(Mos6502::write_address, self);
     }
 
     fn accumulator(self, cpu: &mut Mos6502) {
@@ -203,6 +225,10 @@ impl AddressingModes for MicrocodeReadWriteOperation {
                 println!("{} ${:04X}", OPCODES[cpu.opcode as usize], cpu.address);
             },
         );
+    }
+
+    fn absolute_indexed_x(self, cpu: &mut Mos6502) {
+        todo!()
     }
 
     fn accumulator(self, cpu: &mut Mos6502) {
