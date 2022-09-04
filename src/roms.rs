@@ -2,7 +2,6 @@
 use crate::bus::BusDevice;
 use crate::memory::{RAM, ROM};
 use crate::system::ConsoleDevices;
-use std::error::Error;
 use bitflags::bitflags;
 use byteorder::ReadBytesExt;
 use num_enum::TryFromPrimitive;

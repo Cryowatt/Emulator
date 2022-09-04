@@ -55,6 +55,11 @@ pub struct Alu2A03 {
 }
 
 impl BusDevice for Alu2A03{
-    fn read(&self, _: u16) -> u8 { todo!() }
-    fn write(&mut self, _: u16, _: u8) { todo!() }
+    fn read(&self, address: u16) -> u8 {
+        println!("APU READ!! ${:04X}", address);
+        0
+    }
+
+    fn write(&mut self, address: u16, _: u8) { 
+        println!("APU WRITE!! ${:04X}", address);}
 }

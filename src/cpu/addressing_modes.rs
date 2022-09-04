@@ -2,13 +2,7 @@ use std::cmp::Ordering;
 
 use crate::address::Address;
 
-use super::Mos6502;
-
-pub type MicrocodeBranchOperation = fn(&mut Mos6502) -> bool;
-pub type MicrocodeConditionalOperation = fn(&mut Mos6502, data: u8, condition_met: bool);
-pub type MicrocodeReadOperation = fn(&mut Mos6502, data: u8);
-pub type MicrocodeWriteOperation = fn(&mut Mos6502) -> u8;
-pub type MicrocodeReadWriteOperation = fn(&mut Mos6502, data: u8) -> u8;
+use super::{Mos6502, instructions::{WriteOperation, BranchOperation, ReadWriteOperation, ReadOperation}};
 
 pub type Microcode<TIo, TOp> = fn(&mut Mos6502, io: TIo, op: TOp);
 
@@ -39,7 +33,7 @@ pub trait BranchAddressingModes {
     fn relative(self, cpu: &mut Mos6502);
 }
 
-impl BranchAddressingModes for MicrocodeBranchOperation {
+impl BranchAddressingModes for BranchOperation {
     fn relative(self, cpu: &mut Mos6502) {
         cpu.queue_branch_microcode(Mos6502::read_pc_increment, self, |cpu, io, op| {
             cpu.operand = io(cpu);
@@ -80,7 +74,7 @@ pub trait AddressingModes {
     fn zero_page_indexed_x(self, cpu: &mut Mos6502);
 }
 
-impl AddressingModes for MicrocodeReadOperation {
+impl AddressingModes for ReadOperation {
     fn absolute(self, cpu: &mut Mos6502) {
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_high);
@@ -133,7 +127,7 @@ impl AddressingModes for MicrocodeReadOperation {
     }
 }
 
-impl AddressingModes for MicrocodeWriteOperation {
+impl AddressingModes for WriteOperation {
     fn absolute(self, cpu: &mut Mos6502) {
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_high);
@@ -153,7 +147,7 @@ impl AddressingModes for MicrocodeWriteOperation {
             cpu.address_carry = carry;
         });
         cpu.queue_read(Mos6502::read_address, |cpu, data| {
-            if(cpu.address_carry) {
+            if cpu.address_carry {
                 let high = cpu.address.get_high();
                 cpu.set_address_high(high + 1);
             }
@@ -213,7 +207,7 @@ impl AddressingModes for MicrocodeWriteOperation {
     }
 }
 
-impl AddressingModes for MicrocodeReadWriteOperation {
+impl AddressingModes for ReadWriteOperation {
     fn absolute(self, cpu: &mut Mos6502) {
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
         cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_high);

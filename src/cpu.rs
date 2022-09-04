@@ -8,7 +8,7 @@ use bitflags::bitflags;
 use crate::{roms::Mapper, address::Address};
 
 use self::{addressing_modes::*, instructions::{ReadOperation, WriteOperation, BranchOperation, ReadWriteOperation}};
-pub use self::{addressing_modes::{AddressingModes, MicrocodeReadOperation, MicrocodeWriteOperation}, instructions::MOS6502Instructions};
+pub use self::{addressing_modes::{AddressingModes}, instructions::MOS6502Instructions};
 
 enum MicrocodeTask {
     Branch(BusRead, BranchOperation, Microcode<BusRead, BranchOperation>),
@@ -17,7 +17,6 @@ enum MicrocodeTask {
     ReadWrite(BusWrite, ReadWriteOperation, Microcode<BusWrite, ReadWriteOperation>),
 }
 
-type GetInput = fn(&mut Mos6502) -> u8;
 type BusRead = fn(&mut Mos6502) -> u8;
 type BusWrite = fn(&mut Mos6502, data: u8);
 const STACK_OFFSET: u16 = 0x0100;
@@ -52,7 +51,6 @@ pub struct Mos6502 {
     data: u8,
     address_carry: bool,
     pointer: u8,
-    scratch: u8,
     pub mapper: Box<dyn Mapper>,
 
     cycle_microcode_queue: VecDeque<MicrocodeTask>,
@@ -74,15 +72,10 @@ impl Mos6502 {
             data: 0x00,
             address_carry: false,
             pointer: 0x00,
-            scratch: 0x00,
             mapper,
 
             cycle_microcode_queue: VecDeque::with_capacity(8),
         }
-    }
-
-    fn queue_task(self: &mut Self, task: MicrocodeTask) {
-        self.cycle_microcode_queue.push_back(task);
     }
 
     fn queue_branch_microcode(&mut self, io: BusRead, op: BranchOperation, microcode: Microcode<BusRead, BranchOperation>) {
@@ -111,10 +104,6 @@ impl Mos6502 {
 
     fn queue_write_microcode(&mut self, io: BusWrite, op: WriteOperation, microcode: Microcode<BusWrite, WriteOperation>) {
         self.cycle_microcode_queue.push_back(MicrocodeTask::Write(io, op, microcode));
-    }
-
-    fn queue_read_write(self: &mut Self, io: BusWrite, op: ReadWriteOperation, microcode: Microcode<BusWrite, ReadWriteOperation>) {
-        self.cycle_microcode_queue.push_back(MicrocodeTask::ReadWrite(io, op, microcode));
     }
 
     fn queue_read_write_microcode(&mut self, io: BusWrite, op: ReadWriteOperation, microcode: Microcode<BusWrite, ReadWriteOperation>) {
@@ -168,10 +157,6 @@ impl Mos6502 {
     fn push_stack(&mut self, data: u8) {
         self.write((self.s & 0xff) as u16 + STACK_OFFSET, data);
         self.s -= 1;
-    }
-
-    fn set_scratch(&mut self, data: u8) {
-        self.scratch = data;
     }
 
     fn set_zero_page_address(&mut self, data: u8) {
@@ -247,36 +232,42 @@ impl RP2A03 for Mos6502 {
         match opcode {
             //00/04/08/0c/10/14/18/1c
             0x00 => self.brk(),
+            0x10 => (Self::bpl as BranchOperation).relative(self),
             0x20 => self.jsr(),
-            0x2c => (Self::bit as MicrocodeReadOperation).absolute(self),
+            0x2c => (Self::bit as ReadOperation).absolute(self),
+            0x30 => (Self::bmi as BranchOperation).relative(self),
             0x4c => self.jmp(),
             0x60 => self.rts(),
-            0x78 => (Self::sei as MicrocodeReadOperation).implied(self),
-            0x84 => (Self::sty as MicrocodeWriteOperation).zero_page(self),
-            0xa0 => (Self::ldy as MicrocodeReadOperation).immediate(self),
-            0xc8 => (Self::iny as MicrocodeReadOperation).implied(self),
-            0xd0 => (Self::bne as MicrocodeBranchOperation).relative(self),
-            0xd8 => (Self::cld as MicrocodeReadOperation).implied(self),
-            0xe8 => (Self::inx as MicrocodeReadOperation).implied(self),
+            0x78 => (Self::sei as ReadOperation).implied(self),
+            0x84 => (Self::sty as WriteOperation).zero_page(self),
+            0x88 => (Self::dey as ReadOperation).implied(self),
+            0x98 => (Self::tya as ReadOperation).implied(self),
+            0xa0 => (Self::ldy as ReadOperation).immediate(self),
+            0xc8 => (Self::iny as ReadOperation).implied(self),
+            0xd0 => (Self::bne as BranchOperation).relative(self),
+            0xd8 => (Self::cld as ReadOperation).implied(self),
+            0xe8 => (Self::inx as ReadOperation).implied(self),
             //01/05/09/0d/11/15/19/1d
-            0x65 => (Self::adc as MicrocodeReadOperation).zero_page(self),
-            0x8d => (Self::sta as MicrocodeWriteOperation).absolute(self),
-            0x91 => (Self::sta as MicrocodeWriteOperation).indirect_indexed_y(self),
-            0x95 => (Self::sta as MicrocodeWriteOperation).zero_page_indexed_x(self),
-            0x9d => (Self::sta as MicrocodeWriteOperation).absolute_indexed_x(self),
-            0xa9 => (Self::lda as MicrocodeReadOperation).immediate(self),
+            0x0d => (Self::ora as ReadOperation).zero_page(self),
+            0x65 => (Self::adc as ReadOperation).zero_page(self),
+            0x8d => (Self::sta as WriteOperation).absolute(self),
+            0x91 => (Self::sta as WriteOperation).indirect_indexed_y(self),
+            0x95 => (Self::sta as WriteOperation).zero_page_indexed_x(self),
+            0x9d => (Self::sta as WriteOperation).absolute_indexed_x(self),
+            0xa9 => (Self::lda as ReadOperation).immediate(self),
             //02/06/0a/0e/12/16/1a/1e
-            0x0a => (Self::asl as MicrocodeReadWriteOperation).accumulator(self),
-            0x0e => (Self::asl as MicrocodeReadWriteOperation).absolute(self),
-            0x8a => (Self::txa as MicrocodeReadOperation).immediate(self),
-            0x86 => (Self::stx as MicrocodeWriteOperation).zero_page(self),
-            0x8e => (Self::stx as MicrocodeWriteOperation).absolute(self),
-            0x9a => (Self::txs as MicrocodeReadOperation).implied(self),
-            0xa2 => (Self::ldx as MicrocodeReadOperation).immediate(self),
-            0xaa => (Self::tax as MicrocodeReadOperation).implied(self),
-            0xba => (Self::tsx as MicrocodeReadOperation).implied(self),
-            0xca => (Self::dex as MicrocodeReadOperation).implied(self),
-            0xe6 => (Self::inc as MicrocodeReadWriteOperation).zero_page(self),
+            0x0a => (Self::asl as ReadWriteOperation).accumulator(self),
+            0x0e => (Self::asl as ReadWriteOperation).absolute(self),
+            0x4e => (Self::lsr as ReadWriteOperation).absolute(self),
+            0x8a => (Self::txa as ReadOperation).immediate(self),
+            0x86 => (Self::stx as WriteOperation).zero_page(self),
+            0x8e => (Self::stx as WriteOperation).absolute(self),
+            0x9a => (Self::txs as ReadOperation).implied(self),
+            0xa2 => (Self::ldx as ReadOperation).immediate(self),
+            0xaa => (Self::tax as ReadOperation).implied(self),
+            0xba => (Self::tsx as ReadOperation).implied(self),
+            0xca => (Self::dex as ReadOperation).implied(self),
+            0xe6 => (Self::inc as ReadWriteOperation).zero_page(self),
             //03/07/0b/0f/13/17/1b/1f
 
             _ => panic!("Unsupported opcode {:02x}", opcode),

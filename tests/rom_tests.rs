@@ -1,7 +1,6 @@
-use nes::roms::Mappers;
-use std::{fs::File, io::Read, io::BufReader};
+use std::{fs::File};
 
-use nes::{cpu::{RP2A03, Mos6502}, roms::RomImage, system::{ConsoleSystem}};
+use nes::{roms::RomImage, system::{ConsoleSystem}};
 
 #[test]
 fn basics() {

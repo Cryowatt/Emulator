@@ -1,5 +1,3 @@
-use std::ops::Shl;
-
 use crate::address::Address;
 
 use super::{Mos6502, Status};
@@ -42,7 +40,7 @@ pub trait MOS6502Instructions {
     fn lda(&mut self, data: u8);
     fn ldx(&mut self, data: u8);
     fn ldy(&mut self, data: u8);
-    fn lsr(&mut self, data: u8);
+    fn lsr(&mut self, data: u8) -> u8;
     fn nop(&mut self, data: u8);
     fn ora(&mut self, data: u8);
     fn pha(&mut self, data: u8);
@@ -106,7 +104,7 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn bmi(&mut self) -> bool {
-        todo!()
+        self.p.contains(Status::NEGATIVE)
     }
 
     fn bne(&mut self) -> bool {
@@ -114,7 +112,7 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn bpl(&mut self) -> bool {
-        todo!()
+        !self.p.contains(Status::NEGATIVE)
     }
 
     fn brk(&mut self) {
@@ -177,7 +175,9 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn dey(&mut self, data: u8) {
-        todo!()
+        self.y = self.x.wrapping_add(0xff);
+        self.set_zero_flag(self.y);
+        self.set_negative_flag(self.y);
     }
 
     fn eor(&mut self, data: u8) {
@@ -242,14 +242,20 @@ impl MOS6502Instructions for Mos6502 {
         self.set_negative_flag(self.y);
     }
 
-    fn lsr(&mut self, data: u8) {
-        todo!()
+    fn lsr(&mut self, data: u8) -> u8 {
+        let (result, carry) = data.overflowing_shr(1);
+        self.p.set(Status::CARRY, carry);
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
+        result
     }
 
     fn nop(&mut self, _: u8) {}
 
     fn ora(&mut self, data: u8) {
-        todo!()
+        self.a = self.a | data;
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
     }
 
     fn pha(&mut self, data: u8) {
@@ -318,6 +324,8 @@ impl MOS6502Instructions for Mos6502 {
 
     fn tax(&mut self, _: u8) {
         self.x = self.a;
+        self.set_zero_flag(self.x);
+        self.set_negative_flag(self.x);
     }
 
     fn tay(&mut self, data: u8) {
@@ -326,17 +334,25 @@ impl MOS6502Instructions for Mos6502 {
 
     fn tsx(&mut self, data: u8) {
         self.x = self.s;
+        self.set_zero_flag(self.x);
+        self.set_negative_flag(self.x);
     }
 
     fn txa(&mut self, _: u8) {
         self.a = self.x;
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
     }
 
     fn txs(&mut self, _: u8) {
         self.s = self.x;
+        self.set_zero_flag(self.s);
+        self.set_negative_flag(self.s);
     }
 
     fn tya(&mut self, data: u8) {
-        todo!()
+        self.a = self.y;
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
     }
 }
