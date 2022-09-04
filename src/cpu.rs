@@ -243,19 +243,20 @@ impl RP2A03 for Mos6502 {
             0x65 => (Self::adc as MicrocodeReadOperation).zero_page(self),
             0x8d => (Self::sta as MicrocodeWriteOperation).absolute(self),
             0x91 => (Self::sta as MicrocodeWriteOperation).indirect_indexed_y(self),
+            0x95 => (Self::sta as MicrocodeWriteOperation).zero_page_indexed_x(self),
             0xa9 => (Self::lda as MicrocodeReadOperation).immediate(self),
             //02/06/0a/0e/12/16/1a/1e
             0x0a => (Self::asl as MicrocodeReadWriteOperation).accumulator(self),
+            0x0e => (Self::asl as MicrocodeReadWriteOperation).absolute(self),
             0x8a => (Self::txa as MicrocodeReadOperation).immediate(self),
             0x86 => (Self::stx as MicrocodeWriteOperation).zero_page(self),
             0x8e => (Self::stx as MicrocodeWriteOperation).absolute(self),
             0x9a => (Self::txs as MicrocodeReadOperation).implied(self),
             0xa2 => (Self::ldx as MicrocodeReadOperation).immediate(self),
+            0xaa => (Self::tax as MicrocodeReadOperation).implied(self),
             0xe6 => (Self::inc as MicrocodeReadWriteOperation).zero_page(self),
             //03/07/0b/0f/13/17/1b/1f
 
-            //83 =>  |cpu, mapper| cpu.sax(),
-            
             _ => panic!("Unsupported opcode {:02x}", opcode),
         }
         

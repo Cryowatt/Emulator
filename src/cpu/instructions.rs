@@ -309,8 +309,8 @@ impl MOS6502Instructions for Mos6502 {
         self.y
     }
 
-    fn tax(&mut self, data: u8) {
-        todo!()
+    fn tax(&mut self, _: u8) {
+        self.x = self.a;
     }
 
     fn tay(&mut self, data: u8) {
