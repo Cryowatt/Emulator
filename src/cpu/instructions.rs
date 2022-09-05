@@ -49,7 +49,7 @@ pub trait MOS6502Instructions {
     fn plp(&mut self, data: u8);
     fn rol(&mut self, data: u8);
     fn ror(&mut self, data: u8);
-    fn rti(&mut self, data: u8);
+    fn rti(&mut self);
     fn rts(&mut self);
     fn sbc(&mut self, data: u8);
     fn sec(&mut self, data: u8);
@@ -108,7 +108,7 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn bne(&mut self) -> bool {
-        self.p.contains(Status::ZERO)
+        !self.p.contains(Status::ZERO)
     }
 
     fn bpl(&mut self) -> bool {
@@ -116,13 +116,12 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn brk(&mut self) {
-        self.queue_read(Self::read_pc, |cpu, _| cpu.p.set(Status::INTERRUPT_DISABLE, true));
+        self.queue_read(Self::read_pc_increment, |cpu, _| cpu.p.set(Status::INTERRUPT_DISABLE, true));
         self.queue_write(Self::push_stack, |cpu| cpu.pc.get_high());
         self.queue_write(Self::push_stack, |cpu| cpu.pc.get_low());
         self.queue_write(Self::push_stack, |cpu| cpu.p.bits);
         self.queue_read(Self::read_fixed::<0xfffe>, |cpu, data| cpu.pc.set_low(data));
         self.queue_read(Self::read_fixed::<0xffff>, |cpu, data| {
-            println!("BRK");
             cpu.pc.set_high(data);
             cpu.p.set(Status::BREAK, true);
         });
@@ -208,7 +207,6 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::read_pc_increment, Self::set_address_low);
         self.queue_read(Self::read_pc, |cpu, data| {
             cpu.pc = u16::from_high_low(data, cpu.address.get_low());
-            println!("JMP ${:X}", cpu.pc);
         });
     }
 
@@ -220,7 +218,6 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::read_pc, |cpu, data| {
             cpu.address.set_high(data);
             cpu.pc = cpu.address;
-            println!("JSR ${:X}", cpu.address);
         });
     }
 
@@ -282,16 +279,20 @@ impl MOS6502Instructions for Mos6502 {
         todo!()
     }
 
-    fn rti(&mut self, data: u8) {
-        todo!()
+    fn rti(&mut self) {
+        self.queue_read(Self::read_pc, Self::nop);
+        self.queue_read(Self::read_stack, Self::nop);
+        self.queue_read(Self::pop_stack, |cpu, data| cpu.p = Status::from_bits_truncate(data));
+        self.queue_read(Self::pop_stack, Self::set_pc_low);
+        self.queue_read(Self::pop_stack, Self::set_pc_high);
     }
 
     fn rts(&mut self) {
         self.queue_read(Self::read_pc, Self::nop);
-        self.queue_read(Self::pop_stack, Self::nop);
+        self.queue_read(Self::read_stack, Self::nop);
         self.queue_read(Self::pop_stack, Self::set_pc_low);
-        self.queue_read(Self::read_stack, Self::set_pc_high);
-        self.queue_read(Self::read_pc_increment, |cpu, data| println!("RTS"));
+        self.queue_read(Self::pop_stack, Self::set_pc_high);
+        self.queue_read(Self::read_pc_increment, Self::nop);
     }
 
     fn sbc(&mut self, data: u8) {

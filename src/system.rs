@@ -22,7 +22,7 @@ impl ConsoleSystem {
         let devices = ConsoleDevices {
             ram: RAM::<0x800>::new(0x0, 0x7FF),
             ppu: PPU{},
-            alu: Alu2A03 {},
+            alu: Alu2A03 { fake_status: 0x00 },
         };
         
         let mapper = Mappers::from(image, devices).expect("failed to create mapper");

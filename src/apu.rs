@@ -52,14 +52,23 @@ pub struct Alu2A03 {
     // pub joy1: u8,
     // #[field(offset = 23)]
     // pub joy2: u8,
+
+    pub fake_status: u8,
 }
 
 impl BusDevice for Alu2A03{
     fn read(&self, address: u16) -> u8 {
-        println!("APU READ!! ${:04X}", address);
-        0
+        //println!("APU READ!! ${:04X} {}", address, self.fake_status);
+        if address == 0x4015 {
+            return self.fake_status;
+        }
+        return 0;
     }
 
-    fn write(&mut self, address: u16, _: u8) { 
-        println!("APU WRITE!! ${:04X}", address);}
+    fn write(&mut self, address: u16, data: u8) { 
+        //println!("APU WRITE!! ${:04X} {}", address, data);
+        if address == 0x4015 {
+            self.fake_status = data;
+        }
+    }
 }

@@ -17,6 +17,29 @@ enum MicrocodeTask {
     ReadWrite(BusWrite, ReadWriteOperation, Microcode<BusWrite, ReadWriteOperation>),
 }
 
+const OPCODES: [&'static str; 256] = [
+    "BRK", "ORA", "STP", "SLO", "NOP", "ORA", "ASL", "SLO", "PHP", "ORA", "ASL", "ANC", "NOP",
+    "ORA", "ASL", "SLO", "BPL", "ORA", "STP", "SLO", "NOP", "ORA", "ASL", "SLO", "CLC", "ORA",
+    "NOP", "SLO", "NOP", "ORA", "ASL", "SLO", "JSR", "AND", "STP", "RLA", "BIT", "AND", "ROL",
+    "RLA", "PLP", "AND", "ROL", "ANC", "BIT", "AND", "ROL", "RLA", "BMI", "AND", "STP", "RLA",
+    "NOP", "AND", "ROL", "RLA", "SEC", "AND", "NOP", "RLA", "NOP", "AND", "ROL", "RLA", "RTI",
+    "EOR", "STP", "SRE", "NOP", "EOR", "LSR", "SRE", "PHA", "EOR", "LSR", "ALR", "JMP", "EOR",
+    "LSR", "SRE", "BVC", "EOR", "STP", "SRE", "NOP", "EOR", "LSR", "SRE", "CLI", "EOR", "NOP",
+    "SRE", "NOP", "EOR", "LSR", "SRE", "RTS", "ADC", "STP", "RRA", "NOP", "ADC", "ROR", "RRA",
+    "PLA", "ADC", "ROR", "ARR", "JMP", "ADC", "ROR", "RRA", "BVS", "ADC", "STP", "RRA", "NOP",
+    "ADC", "ROR", "RRA", "SEI", "ADC", "NOP", "RRA", "NOP", "ADC", "ROR", "RRA", "NOP", "STA",
+    "NOP", "SAX", "STY", "STA", "STX", "SAX", "DEY", "NOP", "TXA", "XAA", "STY", "STA", "STX",
+    "SAX", "BCC", "STA", "STP", "AHX", "STY", "STA", "STX", "SAX", "TYA", "STA", "TXS", "TAS",
+    "SHY", "STA", "SHX", "AHX", "LDY", "LDA", "LDX", "LAX", "LDY", "LDA", "LDX", "LAX", "TAY",
+    "LDA", "TAX", "LAX", "LDY", "LDA", "LDX", "LAX", "BCS", "LDA", "STP", "LAX", "LDY", "LDA",
+    "LDX", "LAX", "CLV", "LDA", "TSX", "LAS", "LDY", "LDA", "LDX", "LAX", "CPY", "CMP", "NOP",
+    "DCP", "CPY", "CMP", "DEC", "DCP", "INY", "CMP", "DEX", "AXS", "CPY", "CMP", "DEC", "DCP",
+    "BNE", "CMP", "STP", "DCP", "NOP", "CMP", "DEC", "DCP", "CLD", "CMP", "NOP", "DCP", "NOP",
+    "CMP", "DEC", "DCP", "CPX", "SBC", "NOP", "ISC", "CPX", "SBC", "INC", "ISC", "INX", "SBC",
+    "NOP", "SBC", "CPX", "SBC", "INC", "ISC", "BEQ", "SBC", "STP", "ISC", "NOP", "SBC", "INC",
+    "ISC", "SED", "SBC", "NOP", "ISC", "NOP", "SBC", "INC", "ISC",
+];
+
 type BusRead = fn(&mut Mos6502) -> u8;
 type BusWrite = fn(&mut Mos6502, data: u8);
 const STACK_OFFSET: u16 = 0x0100;
@@ -61,7 +84,7 @@ impl Mos6502 {
         Self {
             a: 0x00,
             pc: 0xfffc,
-            p: Status::DEFAULT,
+            p: Status::IRQ | Status::INTERRUPT_DISABLE,
             s: 0xFD,
             x: 0x00,
             y: 0x00,
@@ -112,7 +135,7 @@ impl Mos6502 {
 
     pub fn read(&mut self, address: u16) -> u8 {
         let data = self.mapper.read(address);
-        println!("\tCPU #${:02x} <- ${:04X}", data, address);
+        //println!("\tCPU #${:02x} <- ${:04X}", data, address);
         data
     }
 
@@ -149,8 +172,8 @@ impl Mos6502 {
     }
 
     fn pop_stack(&mut self) -> u8 {
-        let data = self.read(STACK_OFFSET + self.s as u16);
         self.s += 1;
+        let data = self.read_stack();
         data
     }
 
@@ -181,7 +204,7 @@ impl Mos6502 {
 
     pub fn write(&mut self, address: u16, data: u8) {
         self.mapper.write(address, data);
-        println!("\tCPU #${:02x} -> ${:04X}", data, address);
+        //println!("\tCPU #${:02x} -> ${:04X}", data, address);
     }
 
     fn write_address(&mut self, data: u8) {
@@ -228,6 +251,7 @@ impl RP2A03 for Mos6502 {
 
     //fn decode_opcode(self: &mut Self, mapper: &mut dyn Mapper) {
     fn decode_opcode(self: &mut Self, opcode: u8) {
+        println!("{PC:04X} {OP:02X} {Code} A:{A:02X} X:{X:02X} Y:{Y:02X} P:{P:02X} SP:{SP:02X}", PC = self.pc - 1, OP = opcode, Code = OPCODES[opcode as usize], A = self.a, X = self.x, Y = self.y, P = self.p.bits, SP = self.s);
         self.opcode = opcode;
         match opcode {
             //00/04/08/0c/10/14/18/1c
@@ -236,6 +260,7 @@ impl RP2A03 for Mos6502 {
             0x20 => self.jsr(),
             0x2c => (Self::bit as ReadOperation).absolute(self),
             0x30 => (Self::bmi as BranchOperation).relative(self),
+            0x40 => self.rti(),
             0x4c => self.jmp(),
             0x60 => self.rts(),
             0x78 => (Self::sei as ReadOperation).implied(self),
@@ -243,11 +268,13 @@ impl RP2A03 for Mos6502 {
             0x88 => (Self::dey as ReadOperation).implied(self),
             0x98 => (Self::tya as ReadOperation).implied(self),
             0xa0 => (Self::ldy as ReadOperation).immediate(self),
+            0xb4 => (Self::ldy as ReadOperation).zero_page_indexed_x(self),
             0xc8 => (Self::iny as ReadOperation).implied(self),
             0xd0 => (Self::bne as BranchOperation).relative(self),
             0xd8 => (Self::cld as ReadOperation).implied(self),
             0xe8 => (Self::inx as ReadOperation).implied(self),
             //01/05/09/0d/11/15/19/1d
+            0x01 => (Self::ora as ReadOperation).indexed_indirect_x(self),
             0x0d => (Self::ora as ReadOperation).zero_page(self),
             0x65 => (Self::adc as ReadOperation).zero_page(self),
             0x8d => (Self::sta as WriteOperation).absolute(self),
