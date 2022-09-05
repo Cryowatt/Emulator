@@ -19,16 +19,16 @@ fn basics() {
     system.reset();
 
     // Test rom init cycles
-    while system.cpu.mapper.read(0x6000) != 0x80 {
+    while system.cpu.mapper.read(0x6000) != 0x80 && system.cpu.cycle < 57250 {
         system.cycle();
     }
 
-    todo!();
+    println!("INIT FINISHED");
 
     // Run tests
-    while system.cpu.mapper.read(0x6000) == 0x80 {
-        system.cycle();
-    }
+    // while system.cpu.mapper.read(0x6000) == 0x80 {
+    //     system.cycle();
+    // }
 
     assert_eq!(system.cpu.mapper.read(0x6000), 0x00);
     assert_eq!(system.cpu.mapper.read(0x6001), 0xde);

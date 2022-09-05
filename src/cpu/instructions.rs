@@ -174,7 +174,7 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn dey(&mut self, data: u8) {
-        self.y = self.x.wrapping_add(0xff);
+        self.y = self.y.wrapping_add(0xff);
         self.set_zero_flag(self.y);
         self.set_negative_flag(self.y);
     }

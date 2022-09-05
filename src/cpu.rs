@@ -74,6 +74,7 @@ pub struct Mos6502 {
     data: u8,
     address_carry: bool,
     pointer: u8,
+    pub cycle: u32,
     pub mapper: Box<dyn Mapper>,
 
     cycle_microcode_queue: VecDeque<MicrocodeTask>,
@@ -96,6 +97,7 @@ impl Mos6502 {
             address_carry: false,
             pointer: 0x00,
             mapper,
+            cycle: 0,
 
             cycle_microcode_queue: VecDeque::with_capacity(8),
         }
@@ -230,6 +232,7 @@ pub trait RP2A03 {
 
 impl RP2A03 for Mos6502 {
     fn cycle(&mut self) {
+        self.cycle += 1;
         let microcode = match self.cycle_microcode_queue.pop_front() {
             Some(microcode) => microcode,
             None => {
@@ -251,7 +254,7 @@ impl RP2A03 for Mos6502 {
 
     //fn decode_opcode(self: &mut Self, mapper: &mut dyn Mapper) {
     fn decode_opcode(self: &mut Self, opcode: u8) {
-        println!("{PC:04X} {OP:02X} {Code} A:{A:02X} X:{X:02X} Y:{Y:02X} P:{P:02X} SP:{SP:02X}", PC = self.pc - 1, OP = opcode, Code = OPCODES[opcode as usize], A = self.a, X = self.x, Y = self.y, P = self.p.bits, SP = self.s);
+        println!("{PC:04X} {OP:02X} {Code} A:{A:02X} X:{X:02X} Y:{Y:02X} P:{P:02X} SP:{SP:02X} CYC:{CYC}", PC = self.pc - 1, OP = opcode, Code = OPCODES[opcode as usize], A = self.a, X = self.x, Y = self.y, P = self.p.bits, SP = self.s, CYC = self.cycle);
         self.opcode = opcode;
         match opcode {
             //00/04/08/0c/10/14/18/1c
@@ -268,6 +271,7 @@ impl RP2A03 for Mos6502 {
             0x88 => (Self::dey as ReadOperation).implied(self),
             0x98 => (Self::tya as ReadOperation).implied(self),
             0xa0 => (Self::ldy as ReadOperation).immediate(self),
+            0xa4 => (Self::ldy as ReadOperation).zero_page(self),
             0xb4 => (Self::ldy as ReadOperation).zero_page_indexed_x(self),
             0xc8 => (Self::iny as ReadOperation).implied(self),
             0xd0 => (Self::bne as BranchOperation).relative(self),
@@ -275,7 +279,7 @@ impl RP2A03 for Mos6502 {
             0xe8 => (Self::inx as ReadOperation).implied(self),
             //01/05/09/0d/11/15/19/1d
             0x01 => (Self::ora as ReadOperation).indexed_indirect_x(self),
-            0x0d => (Self::ora as ReadOperation).zero_page(self),
+            0x0d => (Self::ora as ReadOperation).absolute(self),
             0x65 => (Self::adc as ReadOperation).zero_page(self),
             0x8d => (Self::sta as WriteOperation).absolute(self),
             0x91 => (Self::sta as WriteOperation).indirect_indexed_y(self),
