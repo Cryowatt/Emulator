@@ -254,7 +254,10 @@ impl RP2A03 for Mos6502 {
 
     //fn decode_opcode(self: &mut Self, mapper: &mut dyn Mapper) {
     fn decode_opcode(self: &mut Self, opcode: u8) {
-        println!("{PC:04X} {OP:02X} {Code} A:{A:02X} X:{X:02X} Y:{Y:02X} P:{P:02X} SP:{SP:02X} CYC:{CYC}", PC = self.pc - 1, OP = opcode, Code = OPCODES[opcode as usize], A = self.a, X = self.x, Y = self.y, P = self.p.bits, SP = self.s, CYC = self.cycle);
+        let operand0 = self.mapper.read(self.pc);
+        let operand1 = self.mapper.read(self.pc + 1);
+        println!("{PC:04X} {OP:02X} {ARG0:02X} {ARG1:02X} {Code} A:{A:02X} X:{X:02X} Y:{Y:02X} P:{P:02X} SP:{SP:02X} CYC:{CYC}", 
+            PC = self.pc - 1, OP = opcode, ARG0 = operand0, ARG1 = operand1, Code = OPCODES[opcode as usize], A = self.a, X = self.x, Y = self.y, P = self.p.bits, SP = self.s, CYC = self.cycle);
         self.opcode = opcode;
         match opcode {
             //00/04/08/0c/10/14/18/1c
@@ -264,6 +267,7 @@ impl RP2A03 for Mos6502 {
             0x2c => (Self::bit as ReadOperation).absolute(self),
             0x30 => (Self::bmi as BranchOperation).relative(self),
             0x40 => self.rti(),
+            0x48 => self.pha(),
             0x4c => self.jmp(),
             0x60 => self.rts(),
             0x78 => (Self::sei as ReadOperation).implied(self),
@@ -281,6 +285,7 @@ impl RP2A03 for Mos6502 {
             0x01 => (Self::ora as ReadOperation).indexed_indirect_x(self),
             0x0d => (Self::ora as ReadOperation).absolute(self),
             0x65 => (Self::adc as ReadOperation).zero_page(self),
+            0x85 => (Self::sta as WriteOperation).zero_page(self),
             0x8d => (Self::sta as WriteOperation).absolute(self),
             0x91 => (Self::sta as WriteOperation).indirect_indexed_y(self),
             0x95 => (Self::sta as WriteOperation).zero_page_indexed_x(self),

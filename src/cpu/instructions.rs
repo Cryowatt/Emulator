@@ -43,8 +43,8 @@ pub trait MOS6502Instructions {
     fn lsr(&mut self, data: u8) -> u8;
     fn nop(&mut self, data: u8);
     fn ora(&mut self, data: u8);
-    fn pha(&mut self, data: u8);
-    fn php(&mut self, data: u8);
+    fn pha(&mut self);
+    fn php(&mut self);
     fn pla(&mut self, data: u8);
     fn plp(&mut self, data: u8);
     fn rol(&mut self, data: u8);
@@ -99,8 +99,9 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn bit(&mut self, data: u8) {
-        let result = self.a & data;
-        self.p.insert(Status::from_bits_truncate(result).intersection(Status::OVERFLOW | Status::NEGATIVE));
+        self.set_zero_flag(data);
+        self.set_negative_flag(data);
+        self.p.set(Status::ZERO, self.a & data == 0);
     }
 
     fn bmi(&mut self) -> bool {
@@ -255,12 +256,14 @@ impl MOS6502Instructions for Mos6502 {
         self.set_negative_flag(self.a);
     }
 
-    fn pha(&mut self, data: u8) {
-        todo!()
+    fn pha(&mut self) {
+        self.queue_read(Self::read_pc, Self::nop);
+        self.queue_write(Self::push_stack, |cpu| cpu.a);
     }
 
-    fn php(&mut self, data: u8) {
-        todo!()
+    fn php(&mut self) {
+        self.queue_read(Self::read_pc, Self::nop);
+        self.queue_write(Self::push_stack, |cpu| cpu.p.bits);
     }
 
     fn pla(&mut self, data: u8) {

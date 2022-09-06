@@ -1,6 +1,7 @@
 //#![feature(const_ops)]
 use crate::bus::BusDevice;
 use crate::memory::{RAM, ROM};
+use crate::ppu::PPU;
 use crate::system::ConsoleDevices;
 use bitflags::bitflags;
 use byteorder::ReadBytesExt;
@@ -155,6 +156,7 @@ impl Mappers {
 pub trait Mapper {
     fn read(self: &Self, address: u16) -> u8;
     fn write(self: &mut Self, address: u16, data: u8) -> ();
+    fn get_ppu(&mut self) -> &mut PPU;
 }
 
 pub struct NROM {
@@ -171,13 +173,13 @@ impl NROM {
             //image,
             devices,
             program_ram: match image.header.program_ram_size {
-                0 => RAM::<0x2000>::new(0x6000, 0),
-                _ => RAM::<0x2000>::new(0x6000, (image.header.program_ram_size as u16 * 0x2000) - 1),
+                0 => RAM::<0x2000>::new(0x1fff),
+                _ => RAM::<0x2000>::new((image.header.program_ram_size as u16 * 0x2000) - 1),
             },
-            program_rom_bank0: ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0x8000, 0x3fff),
+            program_rom_bank0: ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0x3fff),
             program_rom_bank1: match image.header.program_rom_size {
-                1 => ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0xc000, 0x3fff),
-                2 => ROM::<0x4000>::new(&image.program_rom_data[0x4000..0x8000], 0xc000, 0x3fff),
+                1 => ROM::<0x4000>::new(&image.program_rom_data[0..0x4000], 0x3fff),
+                2 => ROM::<0x4000>::new(&image.program_rom_data[0x4000..0x8000], 0x3fff),
                 _ => panic!("More rom than address space, really weird."),
             },
         }
@@ -185,6 +187,9 @@ impl NROM {
 }
 
 impl Mapper for NROM {
+    fn get_ppu(&mut self) -> &mut PPU {
+        &mut self.devices.ppu
+    }
 
     fn read(self: &Self, address: u16) -> u8 {
         let data = match address >> 13 {

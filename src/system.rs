@@ -20,8 +20,8 @@ pub struct ConsoleDevices {
 impl ConsoleSystem {
     pub fn new(image: RomImage) -> Self {
         let devices = ConsoleDevices {
-            ram: RAM::<0x800>::new(0x0, 0x7FF),
-            ppu: PPU{},
+            ram: RAM::<0x800>::new(0x7FF),
+            ppu: PPU::new(),
             alu: Alu2A03 { fake_status: 0x00 },
         };
         
@@ -45,11 +45,13 @@ impl ConsoleSystem {
         ConsoleSystem { cpu: Mos6502::new(mapper) }
     }
 
-    pub fn reset(self: &mut Self) {
+    pub fn reset(&mut self) {
         self.cpu.reset();
+        self.cpu.mapper.get_ppu().reset();
     }
 
-    pub fn cycle(self: &mut Self) {
+    pub fn cycle(&mut self) {
         self.cpu.cycle();
+        self.cpu.mapper.get_ppu().cycle();
     }
 }
