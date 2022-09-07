@@ -194,15 +194,10 @@ impl AddressingModes for ReadWriteOperation {
     }
 
     fn accumulator(self, cpu: &mut Mos6502) {
-        todo!();
-        // cpu.queue_read_write(|cpu| cpu.a, |cpu, mapper, data| {
-        //     cpu.a = data;
-        //     println!("{} A", OPCODES[cpu.opcode as usize]);
-        // }, self);
-        //     let data = Mos6502::read_pc(cpu, mapper);
-        //     println!("{} A", OPCODES[cpu.opcode as usize]);
-        //     data
-        // }, self));
+        cpu.queue_read_write_microcode(|cpu, _| cpu.data = cpu.read_pc(), self, |cpu, io, op| {
+            cpu.a = op(cpu, cpu.a);
+            io(cpu, cpu.a);
+        })
     }
 
     fn immediate(self, cpu: &mut Mos6502) {

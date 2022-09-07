@@ -89,7 +89,7 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn bcc(&mut self) -> bool {
-        todo!()
+        !self.p.contains(Status::CARRY)
     }
 
     fn bcs(&mut self) -> bool {
@@ -97,7 +97,7 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn beq(&mut self) -> bool {
-        todo!()
+        self.p.contains(Status::ZERO)
     }
 
     fn bit(&mut self, data: u8) {
@@ -155,10 +155,10 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn cmp(&mut self, data: u8) {
-        let (result, carry) = self.a.overflowing_sub(data);
+        let result = self.a.wrapping_sub(data);
         self.set_zero_flag(result);
         self.set_negative_flag(result);
-        self.p.set(Status::CARRY, !carry);
+        self.p.set(Status::CARRY, self.a >= data);
     }
 
     fn cpx(&mut self, data: u8) {
@@ -310,7 +310,7 @@ impl MOS6502Instructions for Mos6502 {
     fn sbc(&mut self, data: u8) {
         let (result, borrow) = {
             let rhs = data;
-            let borrow = self.p.contains(Status::CARRY);
+            let borrow = !self.p.contains(Status::CARRY);
           let(a,b) = self.a.overflowing_sub(rhs);
           let(c,d) = a.overflowing_sub(borrow as u8);
           (c,b||d)
