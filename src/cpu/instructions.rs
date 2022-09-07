@@ -45,7 +45,7 @@ pub trait MOS6502Instructions {
     fn ora(&mut self, data: u8);
     fn pha(&mut self);
     fn php(&mut self);
-    fn pla(&mut self, data: u8);
+    fn pla(&mut self);
     fn plp(&mut self, data: u8);
     fn rol(&mut self, data: u8);
     fn ror(&mut self, data: u8);
@@ -168,13 +168,13 @@ impl MOS6502Instructions for Mos6502 {
         todo!()
     }
 
-    fn dex(&mut self, data: u8) {
+    fn dex(&mut self, _: u8) {
         self.x = self.x.wrapping_add(0xff);
         self.set_zero_flag(self.x);
         self.set_negative_flag(self.x);
     }
 
-    fn dey(&mut self, data: u8) {
+    fn dey(&mut self, _: u8) {
         self.y = self.y.wrapping_add(0xff);
         self.set_zero_flag(self.y);
         self.set_negative_flag(self.y);
@@ -186,7 +186,7 @@ impl MOS6502Instructions for Mos6502 {
 
     fn inc(&mut self, data: u8) -> u8 {
         // no overflow on inc? huh
-        let (result, carry) = data.overflowing_add(1);
+        let result = data.wrapping_add(1);
         self.set_zero_flag(result);
         self.set_negative_flag(result);
         result
@@ -266,8 +266,10 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_write(Self::push_stack, |cpu| cpu.p.bits);
     }
 
-    fn pla(&mut self, data: u8) {
-        todo!()
+    fn pla(&mut self) {
+        self.queue_read(Self::read_pc, Self::nop);
+        self.queue_read(Self::read_stack, Self::nop);
+        self.queue_read(Self::pop_stack, |cpu, data| cpu.a = data);
     }
 
     fn plp(&mut self, data: u8) {
@@ -332,11 +334,11 @@ impl MOS6502Instructions for Mos6502 {
         self.set_negative_flag(self.x);
     }
 
-    fn tay(&mut self, data: u8) {
-        todo!()
+    fn tay(&mut self, _: u8) {
+        self.y = self.a;
     }
 
-    fn tsx(&mut self, data: u8) {
+    fn tsx(&mut self, _: u8) {
         self.x = self.s;
         self.set_zero_flag(self.x);
         self.set_negative_flag(self.x);
@@ -354,7 +356,7 @@ impl MOS6502Instructions for Mos6502 {
         self.set_negative_flag(self.s);
     }
 
-    fn tya(&mut self, data: u8) {
+    fn tya(&mut self, _: u8) {
         self.a = self.y;
         self.set_zero_flag(self.a);
         self.set_negative_flag(self.a);
