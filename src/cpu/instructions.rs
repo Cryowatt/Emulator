@@ -47,7 +47,7 @@ pub trait MOS6502Instructions {
     fn php(&mut self);
     fn pla(&mut self);
     fn plp(&mut self);
-    fn rol(&mut self, data: u8);
+    fn rol(&mut self, data: u8) -> u8;
     fn ror(&mut self, data: u8);
     fn rti(&mut self);
     fn rts(&mut self);
@@ -82,7 +82,9 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn and(&mut self, data: u8) {
-        todo!()
+        self.a = self.a & data;
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
     }
 
     fn asl(&mut self, data: u8) -> u8{
@@ -167,11 +169,17 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn cpx(&mut self, data: u8) {
-        todo!()
+        let result = self.x.wrapping_sub(data);
+        self.set_zero_flag(result);
+        self.set_negative_flag(result);
+        self.p.set(Status::CARRY, self.x >= data);
     }
 
     fn cpy(&mut self, data: u8) {
-        todo!()
+        let result = self.y.wrapping_sub(data);
+        self.set_zero_flag(result);
+        self.set_negative_flag(result);
+        self.p.set(Status::CARRY, self.y >= data);
     }
 
     fn dec(&mut self, data: u8) {
@@ -288,8 +296,12 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::pop_stack, |cpu, data| cpu.p = Status::from_bits_truncate(data));
     }
 
-    fn rol(&mut self, data: u8) {
-        todo!()
+    fn rol(&mut self, data: u8) -> u8 {
+        let (result, carry) = data.overflowing_shl(1);
+        let result = result + self.p.contains(Status::CARRY) as u8;
+        self.p.set(Status::CARRY, carry);
+        self.set_zero_flag(data);
+        result
     }
 
     fn ror(&mut self, data: u8) {
