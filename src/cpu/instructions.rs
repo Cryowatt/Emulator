@@ -46,7 +46,7 @@ pub trait MOS6502Instructions {
     fn pha(&mut self);
     fn php(&mut self);
     fn pla(&mut self);
-    fn plp(&mut self, data: u8);
+    fn plp(&mut self);
     fn rol(&mut self, data: u8);
     fn ror(&mut self, data: u8);
     fn rti(&mut self);
@@ -144,8 +144,8 @@ impl MOS6502Instructions for Mos6502 {
         self.p.set(Status::DECIMAL, false);
     }
 
-    fn cli(&mut self, data: u8) {
-        todo!()
+    fn cli(&mut self, _: u8) {
+        self.p.set(Status::INTERRUPT_DISABLE, false);
     }
 
     fn clv(&mut self, data: u8) {
@@ -272,8 +272,10 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::pop_stack, |cpu, data| cpu.a = data);
     }
 
-    fn plp(&mut self, data: u8) {
-        todo!()
+    fn plp(&mut self) {
+        self.queue_read(Self::read_pc, Self::nop);
+        self.queue_read(Self::read_stack, Self::nop);
+        self.queue_read(Self::pop_stack, |cpu, data| cpu.p = Status::from_bits_truncate(data));
     }
 
     fn rol(&mut self, data: u8) {
