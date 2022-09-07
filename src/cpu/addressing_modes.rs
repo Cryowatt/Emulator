@@ -206,7 +206,7 @@ impl AddressingModes for ReadWriteOperation {
     }
 
     fn immediate(self, cpu: &mut Mos6502) {
-        todo!()
+        todo!();
     }
 
     fn implied(self, cpu: &mut Mos6502) {

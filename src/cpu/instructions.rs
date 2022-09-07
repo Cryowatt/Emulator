@@ -72,6 +72,8 @@ impl MOS6502Instructions for Mos6502 {
         self.set_zero_flag(result);
         self.set_negative_flag(result);
         self.p.set(Status::CARRY, carry);
+        self.p.set(Status::OVERFLOW, (((self.a ^ result) & (data ^ result)) & 0x80) > 0);
+        self.a = result;
     }
 
     fn and(&mut self, data: u8) {
@@ -91,7 +93,7 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn bcs(&mut self) -> bool {
-        todo!()
+        self.p.contains(Status::CARRY)
     }
 
     fn beq(&mut self) -> bool {
@@ -153,7 +155,10 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn cmp(&mut self, data: u8) {
-        todo!()
+        let (result, carry) = self.a.overflowing_sub(data);
+        self.set_zero_flag(result);
+        self.set_negative_flag(result);
+        self.p.set(Status::CARRY, !carry);
     }
 
     fn cpx(&mut self, data: u8) {
@@ -303,7 +308,19 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn sbc(&mut self, data: u8) {
-        todo!()
+        let (result, borrow) = {
+            let rhs = data;
+            let borrow = self.p.contains(Status::CARRY);
+          let(a,b) = self.a.overflowing_sub(rhs);
+          let(c,d) = a.overflowing_sub(borrow as u8);
+          (c,b||d)
+        };
+        
+        self.p.set(Status::CARRY, borrow);
+        self.set_zero_flag(result);
+        self.set_negative_flag(result);
+        self.p.set(Status::OVERFLOW, (((self.a ^ data) & (data ^ result)) & 0x80) > 0);
+        self.a = result;
     }
 
     fn sec(&mut self, data: u8) {
