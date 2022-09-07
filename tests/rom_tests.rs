@@ -26,7 +26,7 @@ fn basics() {
     println!("INIT FINISHED");
 
     // Run tests
-    while system.cpu.mapper.read(0x6000) == 0x80 && system.cpu.cycle < 45960 {
+    while system.cpu.mapper.read(0x6000) == 0x80 && system.cpu.cycle < 245960 {
         system.cycle();
     }
 

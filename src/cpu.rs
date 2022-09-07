@@ -294,6 +294,7 @@ impl RP2A03 for Mos6502 {
             0x01 => (Self::ora as ReadOperation).indexed_indirect_x(self),
             0x0d => (Self::ora as ReadOperation).absolute(self),
             0x65 => (Self::adc as ReadOperation).zero_page(self),
+            0x69 => (Self::adc as ReadOperation).immediate(self),
             0x85 => (Self::sta as WriteOperation).zero_page(self),
             0x8d => (Self::sta as WriteOperation).absolute(self),
             0x91 => (Self::sta as WriteOperation).indirect_indexed_y(self),

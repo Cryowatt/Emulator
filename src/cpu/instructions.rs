@@ -68,10 +68,15 @@ pub trait MOS6502Instructions {
 
 impl MOS6502Instructions for Mos6502 {
     fn adc(&mut self, data: u8) {
-        let (result, carry) = self.a.overflowing_add(data);
+        let (result, carry) = {
+            let(a,b) = self.a.overflowing_add(data);
+            let(c,d) = a.overflowing_add(self.p.contains(Status::CARRY) as u8);
+            (c, b||d)
+        };
+        
+        self.p.set(Status::CARRY, carry);
         self.set_zero_flag(result);
         self.set_negative_flag(result);
-        self.p.set(Status::CARRY, carry);
         self.p.set(Status::OVERFLOW, (((self.a ^ result) & (data ^ result)) & 0x80) > 0);
         self.a = result;
     }
@@ -308,15 +313,13 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn sbc(&mut self, data: u8) {
-        let (result, borrow) = {
-            let rhs = data;
-            let borrow = !self.p.contains(Status::CARRY);
-          let(a,b) = self.a.overflowing_sub(rhs);
-          let(c,d) = a.overflowing_sub(borrow as u8);
-          (c,b||d)
+        let (result, carry) = {
+            let(a,b) = self.a.overflowing_sub(data);
+            let(c,d) = a.overflowing_sub(!self.p.contains(Status::CARRY) as u8);
+            (c,b||d)
         };
         
-        self.p.set(Status::CARRY, borrow);
+        self.p.set(Status::CARRY, carry);
         self.set_zero_flag(result);
         self.set_negative_flag(result);
         self.p.set(Status::OVERFLOW, (((self.a ^ data) & (data ^ result)) & 0x80) > 0);
