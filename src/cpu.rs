@@ -264,6 +264,7 @@ impl RP2A03 for Mos6502 {
             0x00 => self.brk(),
             0x08 => self.php(),
             0x10 => (Self::bpl as BranchOperation).relative(self),
+            0x18 => (Self::clc as ReadOperation).implied(self),
             0x20 => self.jsr(),
             0x28 => self.plp(),
             0x2c => (Self::bit as ReadOperation).absolute(self),

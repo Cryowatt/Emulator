@@ -138,8 +138,8 @@ impl MOS6502Instructions for Mos6502 {
         todo!()
     }
 
-    fn clc(&mut self, data: u8) {
-        todo!()
+    fn clc(&mut self, _: u8) {
+        self.p.set(Status::CARRY, false);
     }
 
     fn cld(&mut self, _: u8) {
