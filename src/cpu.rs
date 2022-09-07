@@ -262,6 +262,7 @@ impl RP2A03 for Mos6502 {
         match opcode {
             //00/04/08/0c/10/14/18/1c
             0x00 => self.brk(),
+            0x08 => self.php(),
             0x10 => (Self::bpl as BranchOperation).relative(self),
             0x20 => self.jsr(),
             0x28 => self.plp(),
