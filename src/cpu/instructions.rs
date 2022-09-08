@@ -36,6 +36,7 @@ pub trait MOS6502Instructions {
     fn inx(&mut self, data: u8);
     fn iny(&mut self, data: u8);
     fn jmp(&mut self);
+    fn jmp_indrect(&mut self);
     fn jsr(&mut self);
     fn lda(&mut self, data: u8);
     fn ldx(&mut self, data: u8);
@@ -227,6 +228,27 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::read_pc, |cpu, data| {
             cpu.pc = u16::from_high_low(data, cpu.address.get_low());
         });
+    }
+
+    fn jmp_indrect(&mut self) {
+        
+        // #   address  R/W description
+        // --- --------- --- ------------------------------------------
+        //  1     PC      R  fetch opcode, increment PC
+        //  2     PC      R  fetch pointer address low, increment PC
+        self.queue_read(Self::read_pc_increment, Self::set_address_low);
+        //  3     PC      R  fetch pointer address high, increment PC
+        self.queue_read(Self::read_pc_increment, Self::set_address_high);
+        //  4   pointer   R  fetch low address to latch
+        self.queue_read(Self::read_address, Self::set_pc_low);
+        //  5  pointer+1* R  fetch PCH, copy latch to PCL
+        self.queue_read(|cpu| {
+            let low = cpu.address.get_low() + 1;
+            cpu.address.set_low(low);
+            let data = cpu.read(cpu.address);
+            println!("INDIRECT: ${:X} {:X} {:X}", cpu.address, cpu.pc.get_low(), data);
+            data
+        }, Self::set_pc_high);
     }
 
     fn jsr(&mut self) {

@@ -275,6 +275,7 @@ impl RP2A03 for Mos6502 {
             0x58 => (Self::cli as ReadOperation).implied(self),
             0x60 => self.rts(),
             0x68 => self.pla(),
+            0x6c => self.jmp_indrect(),
             0x78 => (Self::sei as ReadOperation).implied(self),
             0x84 => (Self::sty as WriteOperation).zero_page(self),
             0x88 => (Self::dey as ReadOperation).implied(self),
@@ -299,6 +300,7 @@ impl RP2A03 for Mos6502 {
             0x09 => (Self::ora as ReadOperation).immediate(self),
             0x0d => (Self::ora as ReadOperation).absolute(self),
             0x29 => (Self::and as ReadOperation).immediate(self),
+            0x61 => (Self::adc as ReadOperation).indexed_indirect_x(self),
             0x65 => (Self::adc as ReadOperation).zero_page(self),
             0x69 => (Self::adc as ReadOperation).immediate(self),
             0x85 => (Self::sta as WriteOperation).zero_page(self),
@@ -309,6 +311,7 @@ impl RP2A03 for Mos6502 {
             0xa5 => (Self::lda as ReadOperation).zero_page(self),
             0xad => (Self::lda as ReadOperation).absolute(self),
             0xa9 => (Self::lda as ReadOperation).immediate(self),
+            0xb1 => (Self::lda as ReadOperation).indirect_indexed_y(self),
             0xc9 => (Self::cmp as ReadOperation).immediate(self),
             0xe9 => (Self::sbc as ReadOperation).immediate(self),
             //02/06/0a/0e/12/16/1a/1e

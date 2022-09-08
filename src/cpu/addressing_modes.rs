@@ -78,7 +78,18 @@ impl AddressingModes for ReadOperation {
     }
 
     fn indirect_indexed_y(self, cpu: &mut Mos6502) {
-        todo!()
+        cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| cpu.pointer = data);
+        cpu.queue_read(Mos6502::read_pointer_increment, Mos6502::set_address_low);
+        cpu.queue_read_microcode(Mos6502::read_pointer_increment, Mos6502::set_address_high, |cpu, io, op| {
+            let (low, carry) = cpu.address.get_low().overflowing_add(cpu.y);
+            cpu.set_address_low(low);                
+
+            if carry {
+                cpu.queue_read(Mos6502::read_address, |cpu, _| cpu.address += 0x100);
+            }
+
+            cpu.queue_read(Mos6502::read_address, op);
+        });
     }
 
     fn zero_page(self, cpu: &mut Mos6502) {
