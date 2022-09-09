@@ -248,10 +248,9 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::read_address, Self::set_pc_low);
         //  5  pointer+1* R  fetch PCH, copy latch to PCL
         self.queue_read(|cpu| {
-            let low = cpu.address.get_low() + 1;
+            let low = cpu.address.get_low().wrapping_add(1);
             cpu.address.set_low(low);
             let data = cpu.read(cpu.address);
-            println!("INDIRECT: ${:X} {:X} {:X}", cpu.address, cpu.pc.get_low(), data);
             data
         }, Self::set_pc_high);
     }

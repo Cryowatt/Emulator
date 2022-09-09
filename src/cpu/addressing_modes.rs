@@ -77,7 +77,7 @@ impl AddressingModes for ReadOperation {
             let (low, carry) = cpu.address.get_low().overflowing_add(cpu.y);
             cpu.set_address_low(low);
             if carry {
-                cpu.queue_read(Mos6502::read_address, |cpu, data| cpu.address += 0x100);
+                cpu.queue_read(Mos6502::read_address, |cpu, data| cpu.address = cpu.address.wrapping_add(0x100));
             }
 
             cpu.queue_read(Mos6502::read_address, op);
