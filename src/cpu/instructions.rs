@@ -28,7 +28,7 @@ pub trait MOS6502Instructions {
     fn cmp(&mut self, data: u8);
     fn cpx(&mut self, data: u8);
     fn cpy(&mut self, data: u8);
-    fn dec(&mut self, data: u8);
+    fn dec(&mut self, data: u8) -> u8;
     fn dex(&mut self, data: u8);
     fn dey(&mut self, data: u8);
     fn eor(&mut self, data: u8);
@@ -183,8 +183,11 @@ impl MOS6502Instructions for Mos6502 {
         self.p.set(Status::CARRY, self.y >= data);
     }
 
-    fn dec(&mut self, data: u8) {
-        todo!()
+    fn dec(&mut self, data: u8) -> u8 {
+        let result = data.wrapping_add(0xff);
+        self.set_zero_flag(result);
+        self.set_negative_flag(result);
+        result
     }
 
     fn dex(&mut self, _: u8) {
