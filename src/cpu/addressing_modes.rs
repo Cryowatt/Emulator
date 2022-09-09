@@ -37,6 +37,7 @@ impl BranchAddressingModes for BranchOperation {
 pub trait AddressingModes {
     fn absolute(self, cpu: &mut Mos6502);
     fn absolute_indexed_x(self, cpu: &mut Mos6502);
+    fn absolute_indexed_y(self, cpu: &mut Mos6502);
     fn accumulator(self, cpu: &mut Mos6502);
     fn immediate(self, cpu: &mut Mos6502);
     fn implied(self, cpu: &mut Mos6502);
@@ -54,7 +55,33 @@ impl AddressingModes for ReadOperation {
     }
 
     fn absolute_indexed_x(self, cpu: &mut Mos6502) {
-        todo!()
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
+        cpu.queue_read_microcode(Mos6502::read_pc_increment, self, |cpu, io, op| {
+            let data = io(cpu);
+            cpu.set_address_high(data);
+            let (low, carry) = cpu.address.get_low().overflowing_add(cpu.x);
+            cpu.set_address_low(low);
+            if carry {
+                cpu.queue_read(Mos6502::read_address, |cpu, data| cpu.address += 0x100);
+            }
+
+            cpu.queue_read(Mos6502::read_address, op);
+        });
+    }
+
+    fn absolute_indexed_y(self, cpu: &mut Mos6502) {
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
+        cpu.queue_read_microcode(Mos6502::read_pc_increment, self, |cpu, io, op| {
+            let data = io(cpu);
+            cpu.set_address_high(data);
+            let (low, carry) = cpu.address.get_low().overflowing_add(cpu.y);
+            cpu.set_address_low(low);
+            if carry {
+                cpu.queue_read(Mos6502::read_address, |cpu, data| cpu.address += 0x100);
+            }
+
+            cpu.queue_read(Mos6502::read_address, op);
+        });
     }
 
     fn accumulator(self, cpu: &mut Mos6502) {
@@ -130,6 +157,10 @@ impl AddressingModes for WriteOperation {
         cpu.queue_write(Mos6502::write_address, self);
     }
 
+    fn absolute_indexed_y(self, cpu: &mut Mos6502) {
+        todo!()
+    }
+
     fn accumulator(self, cpu: &mut Mos6502) {
         todo!()
     }
@@ -143,7 +174,11 @@ impl AddressingModes for WriteOperation {
     }
 
     fn indexed_indirect_x(self, cpu: &mut Mos6502) {
-        todo!()
+        cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| cpu.pointer = data);
+        cpu.queue_read(Mos6502::read_pointer, |cpu, data| cpu.pointer = cpu.pointer.wrapping_add(cpu.x));
+        cpu.queue_read(Mos6502::read_pointer_increment, Mos6502::set_address_low);
+        cpu.queue_read(Mos6502::read_pointer_increment, Mos6502::set_address_high);
+        cpu.queue_write(Mos6502::write_address, self);
     }
 
     fn indirect_indexed_y(self, cpu: &mut Mos6502) {
@@ -201,6 +236,10 @@ impl AddressingModes for ReadWriteOperation {
     }
 
     fn absolute_indexed_x(self, cpu: &mut Mos6502) {
+        todo!()
+    }
+
+    fn absolute_indexed_y(self, cpu: &mut Mos6502) {
         todo!()
     }
 

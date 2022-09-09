@@ -139,11 +139,11 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn bvc(&mut self) -> bool {
-        todo!()
+        !self.p.contains(Status::OVERFLOW)
     }
 
     fn bvs(&mut self) -> bool {
-        todo!()
+        self.p.contains(Status::OVERFLOW)
     }
 
     fn clc(&mut self, _: u8) {
@@ -158,8 +158,8 @@ impl MOS6502Instructions for Mos6502 {
         self.p.set(Status::INTERRUPT_DISABLE, false);
     }
 
-    fn clv(&mut self, data: u8) {
-        todo!()
+    fn clv(&mut self, _: u8) {
+        self.p.set(Status::OVERFLOW, false);
     }
 
     fn cmp(&mut self, data: u8) {
@@ -200,7 +200,9 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn eor(&mut self, data: u8) {
-        todo!()
+        self.a ^= data;
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
     }
 
     fn inc(&mut self, data: u8) -> u8 {
@@ -366,12 +368,12 @@ impl MOS6502Instructions for Mos6502 {
         self.a = result;
     }
 
-    fn sec(&mut self, data: u8) {
-        todo!()
+    fn sec(&mut self, _: u8) {
+        self.p.set(Status::CARRY, true);
     }
 
     fn sed(&mut self, data: u8) {
-        todo!()
+        self.p.set(Status::DECIMAL, true);
     }
 
     fn sei(&mut self, _: u8) {

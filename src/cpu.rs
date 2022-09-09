@@ -161,7 +161,7 @@ impl Mos6502 {
 
     fn read_pointer_increment(&mut self) -> u8 {
         let data = self.read_pointer();
-        self.pointer += 1;
+        self.pointer = self.pointer.wrapping_add(1);
         data
     }
 
@@ -266,16 +266,20 @@ impl RP2A03 for Mos6502 {
             0x10 => (Self::bpl as BranchOperation).relative(self),
             0x18 => (Self::clc as ReadOperation).implied(self),
             0x20 => self.jsr(),
+            0x24 => (Self::bit as ReadOperation).zero_page(self),
             0x28 => self.plp(),
             0x2c => (Self::bit as ReadOperation).absolute(self),
             0x30 => (Self::bmi as BranchOperation).relative(self),
+            0x38 => (Self::sec as ReadOperation).implied(self),
             0x40 => self.rti(),
             0x48 => self.pha(),
             0x4c => self.jmp(),
+            0x50 => (Self::bvc as BranchOperation).relative(self),
             0x58 => (Self::cli as ReadOperation).implied(self),
             0x60 => self.rts(),
             0x68 => self.pla(),
             0x6c => self.jmp_indrect(),
+            0x70 => (Self::bvs as BranchOperation).relative(self),
             0x78 => (Self::sei as ReadOperation).implied(self),
             0x84 => (Self::sty as WriteOperation).zero_page(self),
             0x88 => (Self::dey as ReadOperation).implied(self),
@@ -288,6 +292,8 @@ impl RP2A03 for Mos6502 {
             0xac => (Self::ldy as ReadOperation).absolute(self),
             0xb0 => (Self::bcs as BranchOperation).relative(self),
             0xb4 => (Self::ldy as ReadOperation).zero_page_indexed_x(self),
+            0xb8 => (Self::clv as ReadOperation).implied(self),
+            0xc0 => (Self::cpy as ReadOperation).immediate(self),
             0xc4 => (Self::cpy as ReadOperation).zero_page(self),
             0xc8 => (Self::iny as ReadOperation).implied(self),
             0xd0 => (Self::bne as BranchOperation).relative(self),
@@ -295,23 +301,30 @@ impl RP2A03 for Mos6502 {
             0xe0 => (Self::cpx as ReadOperation).immediate(self),
             0xe8 => (Self::inx as ReadOperation).implied(self),
             0xf0 => (Self::beq as BranchOperation).relative(self),
+            0xf8 => (Self::sed as ReadOperation).implied(self),
             //01/05/09/0d/11/15/19/1d
             0x01 => (Self::ora as ReadOperation).indexed_indirect_x(self),
             0x09 => (Self::ora as ReadOperation).immediate(self),
             0x0d => (Self::ora as ReadOperation).absolute(self),
+            0x21 => (Self::and as ReadOperation).indexed_indirect_x(self),
             0x29 => (Self::and as ReadOperation).immediate(self),
+            0x49 => (Self::eor as ReadOperation).immediate(self),
             0x61 => (Self::adc as ReadOperation).indexed_indirect_x(self),
             0x65 => (Self::adc as ReadOperation).zero_page(self),
             0x69 => (Self::adc as ReadOperation).immediate(self),
+            0x81 => (Self::sta as WriteOperation).indexed_indirect_x(self),
             0x85 => (Self::sta as WriteOperation).zero_page(self),
             0x8d => (Self::sta as WriteOperation).absolute(self),
             0x91 => (Self::sta as WriteOperation).indirect_indexed_y(self),
             0x95 => (Self::sta as WriteOperation).zero_page_indexed_x(self),
             0x9d => (Self::sta as WriteOperation).absolute_indexed_x(self),
             0xa5 => (Self::lda as ReadOperation).zero_page(self),
+            0xa1 => (Self::lda as ReadOperation).indexed_indirect_x(self),
             0xad => (Self::lda as ReadOperation).absolute(self),
             0xa9 => (Self::lda as ReadOperation).immediate(self),
             0xb1 => (Self::lda as ReadOperation).indirect_indexed_y(self),
+            0xb9 => (Self::lda as ReadOperation).absolute_indexed_y(self),
+            0xbd => (Self::lda as ReadOperation).absolute_indexed_x(self),
             0xc9 => (Self::cmp as ReadOperation).immediate(self),
             0xe9 => (Self::sbc as ReadOperation).immediate(self),
             //02/06/0a/0e/12/16/1a/1e
@@ -319,8 +332,10 @@ impl RP2A03 for Mos6502 {
             0x0a => (Self::asl as ReadWriteOperation).accumulator(self),
             0x0e => (Self::asl as ReadWriteOperation).absolute(self),
             0x2a => (Self::rol as ReadWriteOperation).accumulator(self),
+            0x2e => (Self::rol as ReadWriteOperation).absolute(self),
             0x4a => (Self::lsr as ReadWriteOperation).accumulator(self),
             0x4e => (Self::lsr as ReadWriteOperation).absolute(self),
+            0x6a => (Self::ror as ReadWriteOperation).accumulator(self),
             0x8a => (Self::txa as ReadOperation).immediate(self),
             0x86 => (Self::stx as WriteOperation).zero_page(self),
             0x8e => (Self::stx as WriteOperation).absolute(self),
@@ -331,6 +346,7 @@ impl RP2A03 for Mos6502 {
             0xba => (Self::tsx as ReadOperation).implied(self),
             0xca => (Self::dex as ReadOperation).implied(self),
             0xe6 => (Self::inc as ReadWriteOperation).zero_page(self),
+            0xea => (Self::nop as ReadOperation).implied(self),
             //03/07/0b/0f/13/17/1b/1f
 
             _ => panic!("Unsupported opcode {:02x}", opcode),
