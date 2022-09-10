@@ -134,7 +134,11 @@ impl AddressingModes for ReadOperation {
     }
 
     fn zero_page_indexed_y(self, cpu: &mut Mos6502) {
-        todo!()
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_zero_page_address);
+        cpu.queue_read(Mos6502::read_address, |cpu, data| {
+            cpu.set_zero_page_address(data.wrapping_add(cpu.y));
+        });
+        cpu.queue_read(Mos6502::read_address, self);
     }
 }
 

@@ -28,6 +28,7 @@ pub trait MOS6502Instructions {
     fn cmp(&mut self, data: u8);
     fn cpx(&mut self, data: u8);
     fn cpy(&mut self, data: u8);
+    fn dcp(&mut self, data: u8) -> u8;
     fn dec(&mut self, data: u8) -> u8;
     fn dex(&mut self, data: u8);
     fn dey(&mut self, data: u8);
@@ -38,6 +39,7 @@ pub trait MOS6502Instructions {
     fn jmp(&mut self);
     fn jmp_indrect(&mut self);
     fn jsr(&mut self);
+    fn lax(&mut self, data: u8);
     fn lda(&mut self, data: u8);
     fn ldx(&mut self, data: u8);
     fn ldy(&mut self, data: u8);
@@ -52,6 +54,7 @@ pub trait MOS6502Instructions {
     fn ror(&mut self, data: u8) -> u8;
     fn rti(&mut self);
     fn rts(&mut self);
+    fn sax(&mut self) -> u8;
     fn sbc(&mut self, data: u8);
     fn sec(&mut self, data: u8);
     fn sed(&mut self, data: u8);
@@ -183,6 +186,12 @@ impl MOS6502Instructions for Mos6502 {
         self.p.set(Status::CARRY, self.y >= data);
     }
 
+    fn dcp(&mut self, data: u8) -> u8 {
+        let data = self.dec(data);
+        self.cmp(data);
+        data
+    }
+
     fn dec(&mut self, data: u8) -> u8 {
         let result = data.wrapping_add(0xff);
         self.set_zero_flag(result);
@@ -264,6 +273,13 @@ impl MOS6502Instructions for Mos6502 {
             cpu.address.set_high(data);
             cpu.pc = cpu.address;
         });
+    }
+
+    fn lax(&mut self, data: u8) {
+        self.x = data;
+        self.a = data;
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
     }
 
     fn lda(&mut self, data: u8) {
@@ -354,6 +370,10 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::pop_stack, Self::set_pc_low);
         self.queue_read(Self::pop_stack, Self::set_pc_high);
         self.queue_read(Self::read_pc_increment, Self::nop);
+    }
+
+    fn sax(&mut self) -> u8 {
+        self.a & self.x
     }
 
     fn sbc(&mut self, data: u8) {
