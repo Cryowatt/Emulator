@@ -45,6 +45,7 @@ pub trait AddressingModes {
     fn indirect_indexed_y(self, cpu: &mut Mos6502);
     fn zero_page(self, cpu: &mut Mos6502);
     fn zero_page_indexed_x(self, cpu: &mut Mos6502);
+    fn zero_page_indexed_y(self, cpu: &mut Mos6502);
 }
 
 impl AddressingModes for ReadOperation {
@@ -131,6 +132,10 @@ impl AddressingModes for ReadOperation {
         });
         cpu.queue_read(Mos6502::read_address, self);
     }
+
+    fn zero_page_indexed_y(self, cpu: &mut Mos6502) {
+        todo!()
+    }
 }
 
 impl AddressingModes for WriteOperation {
@@ -158,7 +163,20 @@ impl AddressingModes for WriteOperation {
     }
 
     fn absolute_indexed_y(self, cpu: &mut Mos6502) {
-        todo!()
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
+        cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| {
+            cpu.set_address_high(data);
+            let (low, carry) = cpu.address.get_low().overflowing_add(cpu.y);
+            cpu.set_address_low(low);
+            cpu.address_carry = carry;
+        });
+        cpu.queue_read(Mos6502::read_address, |cpu, data| {
+            if cpu.address_carry {
+                let high = cpu.address.get_high();
+                cpu.set_address_high(high + 1);
+            }
+        });
+        cpu.queue_write(Mos6502::write_address, self);
     }
 
     fn accumulator(self, cpu: &mut Mos6502) {
@@ -214,6 +232,17 @@ impl AddressingModes for WriteOperation {
         // 4  address+I* W  write to effective address
         cpu.queue_write(Mos6502::write_address, self);
     }
+
+    fn zero_page_indexed_y(self, cpu: &mut Mos6502) {
+        // 2     PC      R  fetch address, increment PC
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_zero_page_address);
+        // 3   address   R  read from address, add index register to it
+        cpu.queue_read(Mos6502::read_address, |cpu, data| {
+            cpu.set_zero_page_address(data.wrapping_add(cpu.y));
+        });
+        // 4  address+I* W  write to effective address
+        cpu.queue_write(Mos6502::write_address, self);
+    }
 }
 
 impl AddressingModes for ReadWriteOperation {
@@ -236,7 +265,40 @@ impl AddressingModes for ReadWriteOperation {
     }
 
     fn absolute_indexed_x(self, cpu: &mut Mos6502) {
-        todo!()
+        //     #   address  R/W description
+        //    --- --------- --- ------------------------------------------
+        //     1    PC       R  fetch opcode, increment PC
+        //     2    PC       R  fetch low byte of address, increment PC
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_address_low);
+        //     3    PC       R  fetch high byte of address,
+        //                      add index register X to low address byte,
+        //                      increment PC
+        cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| {
+            cpu.set_address_high(data);
+            let (low, carry) = cpu.address.get_low().overflowing_add(cpu.x);
+            cpu.set_address_low(low);            
+            cpu.address_carry = carry;
+        });
+        //     4  address+X* R  read from effective address,
+        //                      fix the high byte of effective address
+        cpu.queue_read(Mos6502::read_address, |cpu, data| {
+            if cpu.address_carry {
+                cpu.address += 0x100;
+            }
+        });
+        //     5  address+X  R  re-read from effective address
+        cpu.queue_read(Mos6502::read_address, |cpu, data| cpu.data = data);
+        //     6  address+X  W  write the value back to effective address,
+        //                      and do the operation on it
+        cpu.queue_read_write_microcode(Mos6502::write_address, self, |cpu, io, op| {
+            io(cpu, cpu.data);
+            cpu.data = op(cpu, cpu.operand);
+        });
+        //     7  address+X  W  write the new value to effective address
+        cpu.queue_write(Mos6502::write_address, |cpu| cpu.data);
+
+        //    Notes: * The high byte of the effective address may be invalid
+        //             at this time, i.e. it may be smaller by $100.
     }
 
     fn absolute_indexed_y(self, cpu: &mut Mos6502) {
@@ -277,6 +339,19 @@ impl AddressingModes for ReadWriteOperation {
     }
 
     fn zero_page_indexed_x(self, cpu: &mut Mos6502) {
+        cpu.queue_read(Mos6502::read_pc_increment, Mos6502::set_zero_page_address);
+        cpu.queue_read(Mos6502::read_address, |cpu, data| {
+            cpu.set_zero_page_address(data.wrapping_add(cpu.x));
+        });
+        cpu.queue_read(Mos6502::read_address, |cpu, data| cpu.operand = data);
+        cpu.queue_read_write_microcode(Mos6502::write_address, self, |cpu, io, op| {
+            io(cpu, cpu.data);
+            cpu.data = op(cpu, cpu.operand);
+        });
+        cpu.queue_write(Mos6502::write_address, |cpu| cpu.data);
+    }
+
+    fn zero_page_indexed_y(self, cpu: &mut Mos6502) {
         todo!()
     }
 }
