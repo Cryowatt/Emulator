@@ -28,7 +28,8 @@ pub trait MOS6502Instructions {
     fn cmp(&mut self, data: u8);
     fn cpx(&mut self, data: u8);
     fn cpy(&mut self, data: u8);
-    fn dec(&mut self, data: u8);
+    fn dcp(&mut self, data: u8) -> u8;
+    fn dec(&mut self, data: u8) -> u8;
     fn dex(&mut self, data: u8);
     fn dey(&mut self, data: u8);
     fn eor(&mut self, data: u8);
@@ -36,7 +37,9 @@ pub trait MOS6502Instructions {
     fn inx(&mut self, data: u8);
     fn iny(&mut self, data: u8);
     fn jmp(&mut self);
+    fn jmp_indrect(&mut self);
     fn jsr(&mut self);
+    fn lax(&mut self, data: u8);
     fn lda(&mut self, data: u8);
     fn ldx(&mut self, data: u8);
     fn ldy(&mut self, data: u8);
@@ -48,9 +51,10 @@ pub trait MOS6502Instructions {
     fn pla(&mut self);
     fn plp(&mut self);
     fn rol(&mut self, data: u8) -> u8;
-    fn ror(&mut self, data: u8);
+    fn ror(&mut self, data: u8) -> u8;
     fn rti(&mut self);
     fn rts(&mut self);
+    fn sax(&mut self) -> u8;
     fn sbc(&mut self, data: u8);
     fn sec(&mut self, data: u8);
     fn sed(&mut self, data: u8);
@@ -138,11 +142,11 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn bvc(&mut self) -> bool {
-        todo!()
+        !self.p.contains(Status::OVERFLOW)
     }
 
     fn bvs(&mut self) -> bool {
-        todo!()
+        self.p.contains(Status::OVERFLOW)
     }
 
     fn clc(&mut self, _: u8) {
@@ -157,8 +161,8 @@ impl MOS6502Instructions for Mos6502 {
         self.p.set(Status::INTERRUPT_DISABLE, false);
     }
 
-    fn clv(&mut self, data: u8) {
-        todo!()
+    fn clv(&mut self, _: u8) {
+        self.p.set(Status::OVERFLOW, false);
     }
 
     fn cmp(&mut self, data: u8) {
@@ -182,8 +186,17 @@ impl MOS6502Instructions for Mos6502 {
         self.p.set(Status::CARRY, self.y >= data);
     }
 
-    fn dec(&mut self, data: u8) {
-        todo!()
+    fn dcp(&mut self, data: u8) -> u8 {
+        let data = self.dec(data);
+        self.cmp(data);
+        data
+    }
+
+    fn dec(&mut self, data: u8) -> u8 {
+        let result = data.wrapping_add(0xff);
+        self.set_zero_flag(result);
+        self.set_negative_flag(result);
+        result
     }
 
     fn dex(&mut self, _: u8) {
@@ -199,7 +212,9 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn eor(&mut self, data: u8) {
-        todo!()
+        self.a ^= data;
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
     }
 
     fn inc(&mut self, data: u8) -> u8 {
@@ -229,6 +244,26 @@ impl MOS6502Instructions for Mos6502 {
         });
     }
 
+    fn jmp_indrect(&mut self) {
+        
+        // #   address  R/W description
+        // --- --------- --- ------------------------------------------
+        //  1     PC      R  fetch opcode, increment PC
+        //  2     PC      R  fetch pointer address low, increment PC
+        self.queue_read(Self::read_pc_increment, Self::set_address_low);
+        //  3     PC      R  fetch pointer address high, increment PC
+        self.queue_read(Self::read_pc_increment, Self::set_address_high);
+        //  4   pointer   R  fetch low address to latch
+        self.queue_read(Self::read_address, Self::set_pc_low);
+        //  5  pointer+1* R  fetch PCH, copy latch to PCL
+        self.queue_read(|cpu| {
+            let low = cpu.address.get_low().wrapping_add(1);
+            cpu.address.set_low(low);
+            let data = cpu.read(cpu.address);
+            data
+        }, Self::set_pc_high);
+    }
+
     fn jsr(&mut self) {
         self.queue_read(Self::read_pc_increment, |cpu, data| cpu.address.set_low(data));
         self.queue_read(Self::read_stack, Self::nop);
@@ -238,6 +273,13 @@ impl MOS6502Instructions for Mos6502 {
             cpu.address.set_high(data);
             cpu.pc = cpu.address;
         });
+    }
+
+    fn lax(&mut self, data: u8) {
+        self.x = data;
+        self.a = data;
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
     }
 
     fn lda(&mut self, data: u8) {
@@ -297,15 +339,21 @@ impl MOS6502Instructions for Mos6502 {
     }
 
     fn rol(&mut self, data: u8) -> u8 {
-        let (result, carry) = data.overflowing_shl(1);
-        let result = result + self.p.contains(Status::CARRY) as u8;
+        let (mut result, carry) = data.overflowing_shl(1);
+        result += self.p.contains(Status::CARRY) as u8;
+        self.set_zero_flag(result);
         self.p.set(Status::CARRY, carry);
-        self.set_zero_flag(data);
+        self.set_negative_flag(result);
         result
     }
 
-    fn ror(&mut self, data: u8) {
-        todo!()
+    fn ror(&mut self, data: u8) -> u8 {
+        let (mut result, carry) = data.overflowing_shr(1);
+        result |= if self.p.contains(Status::CARRY) { 0b1000_0000 } else { 0 };
+        self.set_zero_flag(result);
+        self.p.set(Status::CARRY, carry);
+        self.set_negative_flag(result);
+        result
     }
 
     fn rti(&mut self) {
@@ -324,6 +372,10 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::read_pc_increment, Self::nop);
     }
 
+    fn sax(&mut self) -> u8 {
+        self.a & self.x
+    }
+
     fn sbc(&mut self, data: u8) {
         let (result, carry) = {
             let(a,b) = self.a.overflowing_sub(data);
@@ -338,12 +390,12 @@ impl MOS6502Instructions for Mos6502 {
         self.a = result;
     }
 
-    fn sec(&mut self, data: u8) {
-        todo!()
+    fn sec(&mut self, _: u8) {
+        self.p.set(Status::CARRY, true);
     }
 
     fn sed(&mut self, data: u8) {
-        todo!()
+        self.p.set(Status::DECIMAL, true);
     }
 
     fn sei(&mut self, _: u8) {

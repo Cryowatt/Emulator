@@ -3,6 +3,26 @@ use std::{fs::File};
 use nes::{roms::RomImage, system::{ConsoleSystem}};
 
 #[test]
+fn nes_test() {
+    let mut rom_file = File::open("./nes-test-roms/other/nestest.nes").expect("Test rom open error");
+    let image = RomImage::from(&mut rom_file).expect("Test rom load error");
+    let mut system = ConsoleSystem::new(image);
+    // system.reset();
+    system.cpu.pc = 0xc000;
+
+    // Run tests
+    while system.cpu.cycle < 26554 {
+        system.cycle();
+    }
+
+    assert_eq!(system.cpu.mapper.read(0x6000), 0x00);
+    assert_eq!(system.cpu.mapper.read(0x6001), 0xde);
+    assert_eq!(system.cpu.mapper.read(0x6002), 0xb0);
+    assert_eq!(system.cpu.mapper.read(0x6003), 0x61);
+    
+}
+
+#[test]
 fn basics() {
     
     //let cpu = crate::nes::cpu::RP2A03::new();
@@ -14,21 +34,22 @@ fn basics() {
     // assert_eq!(cpu.s, 0xFD);
     
     let mut rom_file = File::open("./nes-test-roms/instr_test-v5/rom_singles/01-basics.nes").expect("Test rom open error");
+    // let mut rom_file = File::open("./nes-test-roms/other/nestest.nes").expect("Test rom open error");
     let image = RomImage::from(&mut rom_file).expect("Test rom load error");
     let mut system = ConsoleSystem::new(image);
     system.reset();
 
     // Test rom init cycles
-    while system.cpu.mapper.read(0x6000) != 0x80 {
-        system.cycle();
-    }
+    // while system.cpu.mapper.read(0x6000) != 0x80 {
+    //     system.cycle();
+    // }
 
     println!("INIT FINISHED");
 
     // Run tests
-    while system.cpu.mapper.read(0x6000) == 0x80 && system.cpu.cycle < 245960 {
-        system.cycle();
-    }
+    // while system.cpu.mapper.read(0x6000) == 0x80 && system.cpu.cycle < 26554 {
+    //     system.cycle();
+    // }
 
     assert_eq!(system.cpu.mapper.read(0x6000), 0x00);
     assert_eq!(system.cpu.mapper.read(0x6001), 0xde);
