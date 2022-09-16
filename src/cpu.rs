@@ -449,6 +449,11 @@ impl RP2A03 for Mos6502 {
             0xd7 => (Self::dcp as ReadWriteOperation).zero_page_indexed_x(self),
             0xdb => (Self::dcp as ReadWriteOperation).absolute_indexed_y(self),
             0xdf => (Self::dcp as ReadWriteOperation).absolute_indexed_x(self),
+            0xe3 => (Self::isc as ReadWriteOperation).indexed_indirect_x(self),
+            0xe7 => (Self::isc as ReadWriteOperation).zero_page(self),
+            0xef => (Self::isc as ReadWriteOperation).absolute(self),
+            0xf3 => (Self::isc as ReadWriteOperation).indirect_indexed_y(self),
+            0xf3 => (Self::isc as ReadWriteOperation).indirect_indexed_y(self),
             0xeb => (Self::sbc as ReadOperation).immediate(self),
 
             _ => panic!("Unsupported opcode {:02x}", opcode),

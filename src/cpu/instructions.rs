@@ -36,6 +36,7 @@ pub trait MOS6502Instructions {
     fn inc(&mut self, data: u8) -> u8;
     fn inx(&mut self, data: u8);
     fn iny(&mut self, data: u8);
+    fn isc(&mut self, data: u8) -> u8;
     fn jmp(&mut self);
     fn jmp_indrect(&mut self);
     fn jsr(&mut self);
@@ -235,6 +236,12 @@ impl MOS6502Instructions for Mos6502 {
         self.y = self.y.wrapping_add(1);
         self.set_zero_flag(self.y);
         self.set_negative_flag(self.y);
+    }
+
+    fn isc(&mut self, data: u8) -> u8 {
+        let result = self.inc(data);
+        self.sbc(result);
+        result
     }
 
     fn jmp(&mut self) {
