@@ -385,7 +385,44 @@ impl AddressingModes for ReadWriteOperation {
     }
 
     fn indirect_indexed_y(self, cpu: &mut Mos6502) {
-        todo!()
+        // #    address   R/W description
+        // --- ----------- --- ------------------------------------------
+        //  1      PC       R  fetch opcode, increment PC
+        //  2      PC       R  fetch pointer address, increment PC
+        cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| cpu.pointer = data);
+        //  3    pointer    R  fetch effective address low
+        cpu.queue_read(Mos6502::read_pointer, Mos6502::set_address_low);
+        //  4   pointer+1   R  fetch effective address high,
+        //                     add Y to low byte of effective address
+        cpu.queue_read(Mos6502::read_pointer, |cpu, data| {
+            cpu.set_address_high(data);
+            let (low, carry) = cpu.address.get_low().overflowing_add(cpu.y);
+            cpu.set_address_low(low);
+            cpu.address_carry = carry;
+        });
+        //  5   address+Y*  R  read from effective address,
+        //                     fix high byte of effective address
+        cpu.queue_read(Mos6502::read_address, |cpu, data| {
+            if cpu.address_carry {
+                cpu.address += 0x100;
+            }
+        });
+        //  6   address+Y   R  read from effective address
+        cpu.queue_read(Mos6502::read_address, |cpu, data| cpu.operand = data);
+        //  7   address+Y   W  write the value back to effective address,
+        //                     and do the operation on it
+        cpu.queue_read_write_microcode(Mos6502::write_address, self, |cpu, io, op| {
+            io(cpu, cpu.data);
+            cpu.data = op(cpu, cpu.operand);
+        });
+        //  8   address+Y   W  write the new value to effective address
+        cpu.queue_write(Mos6502::write_address, |cpu| cpu.data);
+ 
+        // Notes: The effective address is always fetched from zero page,
+        //        i.e. the zero page boundary crossing is not handled.
+ 
+        //        * The high byte of the effective address may be invalid
+        //          at this time, i.e. it may be smaller by $100.
     }
 
     fn zero_page(self, cpu: &mut Mos6502) {

@@ -51,6 +51,7 @@ pub trait MOS6502Instructions {
     fn php(&mut self);
     fn pla(&mut self);
     fn plp(&mut self);
+    fn rla(&mut self, data: u8) -> u8;
     fn rol(&mut self, data: u8) -> u8;
     fn ror(&mut self, data: u8) -> u8;
     fn rti(&mut self);
@@ -60,6 +61,7 @@ pub trait MOS6502Instructions {
     fn sec(&mut self, data: u8);
     fn sed(&mut self, data: u8);
     fn sei(&mut self, data: u8);
+    fn slo(&mut self, data: u8) -> u8;
     fn sta(&mut self) -> u8;
     fn stx(&mut self) -> u8;
     fn sty(&mut self) -> u8;
@@ -345,6 +347,12 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::pop_stack, |cpu, data| cpu.p = Status::from_bits_truncate(data));
     }
 
+    fn rla(&mut self, data: u8) -> u8 {
+        let result = self.rol(data);
+        self.and(data);
+        result
+    } 
+
     fn rol(&mut self, data: u8) -> u8 {
         let (mut result, carry) = data.overflowing_shl(1);
         result += self.p.contains(Status::CARRY) as u8;
@@ -407,6 +415,12 @@ impl MOS6502Instructions for Mos6502 {
 
     fn sei(&mut self, _: u8) {
         self.p.set(Status::INTERRUPT_DISABLE, true);
+    }
+
+    fn slo(&mut self, data: u8) -> u8 {
+        let result = self.asl(data);
+        self.ora(data);
+        result
     }
 
     fn sta(&mut self) -> u8 {
