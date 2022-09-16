@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use crate::address::Address;
 
-use super::{Mos6502, instructions::{WriteOperation, BranchOperation, ReadWriteOperation, ReadOperation}};
+use super::{Mos6502, instructions::{WriteOperation, BranchOperation, ReadWriteOperation, ReadOperation}, MOS6502Instructions};
 
 pub type Microcode<TIo, TOp> = fn(&mut Mos6502, io: TIo, op: TOp);
 pub trait BranchAddressingModes {
@@ -325,7 +325,30 @@ impl AddressingModes for ReadWriteOperation {
     }
 
     fn indexed_indirect_x(self, cpu: &mut Mos6502) {
-        todo!()
+        //     #    address   R/W description
+        //    --- ----------- --- ------------------------------------------
+        //     1      PC       R  fetch opcode, increment PC
+        //     2      PC       R  fetch pointer address, increment PC
+        cpu.queue_read(Mos6502::read_pc_increment, |cpu, data| cpu.pointer = data);
+        //     3    pointer    R  read from the address, add X to it
+        cpu.queue_read(Mos6502::read_pointer, |cpu, data| cpu.pointer = cpu.pointer.wrapping_add(cpu.x));
+        //     4   pointer+X   R  fetch effective address low
+        cpu.queue_read(Mos6502::read_pointer_increment, Mos6502::set_address_low);
+        //     5  pointer+X+1  R  fetch effective address high
+        cpu.queue_read(Mos6502::read_pointer_increment, Mos6502::set_address_high);
+        //     6    address    R  read from effective address
+        cpu.queue_read(Mos6502::read_address, Mos6502::nop);
+        //     7    address    W  write the value back to effective address,
+        //                        and do the operation on it
+        cpu.queue_read_write_microcode(Mos6502::write_address, self, |cpu, io, op| {
+            io(cpu, cpu.data);
+            cpu.data = op(cpu, cpu.operand);
+        });
+        //     8    address    W  write the new value to effective address
+        cpu.queue_write(Mos6502::write_address, |cpu| cpu.data);
+
+        //    Note: The effective address is always fetched from zero page,
+        //          i.e. the zero page boundary crossing is not handled.
     }
 
     fn indirect_indexed_y(self, cpu: &mut Mos6502) {
