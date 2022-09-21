@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use crate::address::Address;
 
-use super::{Mos6502, instructions::{WriteOperation, BranchOperation, ReadWriteOperation, ReadOperation}, MOS6502Instructions};
+use super::{Mos6502, instructions::{WriteOperation, BranchOperation, ReadWriteOperation, ReadOperation}, Operations};
 
 pub type Microcode<TIo, TOp> = fn(&mut Mos6502, io: TIo, op: TOp);
 pub trait BranchAddressingModes {

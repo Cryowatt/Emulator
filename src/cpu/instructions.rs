@@ -7,7 +7,7 @@ pub type ReadOperation = fn(&mut Mos6502, data: u8);
 pub type WriteOperation = fn(&mut Mos6502) -> u8;
 pub type ReadWriteOperation = fn(&mut Mos6502, data: u8) -> u8;
 
-pub trait MOS6502Instructions {
+pub trait Operations {
     fn adc(&mut self, data: u8);
     fn and(&mut self, data: u8);
     fn asl(&mut self, data: u8) -> u8;
@@ -28,7 +28,6 @@ pub trait MOS6502Instructions {
     fn cmp(&mut self, data: u8);
     fn cpx(&mut self, data: u8);
     fn cpy(&mut self, data: u8);
-    fn dcp(&mut self, data: u8) -> u8;
     fn dec(&mut self, data: u8) -> u8;
     fn dex(&mut self, data: u8);
     fn dey(&mut self, data: u8);
@@ -36,11 +35,9 @@ pub trait MOS6502Instructions {
     fn inc(&mut self, data: u8) -> u8;
     fn inx(&mut self, data: u8);
     fn iny(&mut self, data: u8);
-    fn isc(&mut self, data: u8) -> u8;
     fn jmp(&mut self);
     fn jmp_indrect(&mut self);
     fn jsr(&mut self);
-    fn lax(&mut self, data: u8);
     fn lda(&mut self, data: u8);
     fn ldx(&mut self, data: u8);
     fn ldy(&mut self, data: u8);
@@ -51,17 +48,14 @@ pub trait MOS6502Instructions {
     fn php(&mut self);
     fn pla(&mut self);
     fn plp(&mut self);
-    fn rla(&mut self, data: u8) -> u8;
     fn rol(&mut self, data: u8) -> u8;
     fn ror(&mut self, data: u8) -> u8;
     fn rti(&mut self);
     fn rts(&mut self);
-    fn sax(&mut self) -> u8;
     fn sbc(&mut self, data: u8);
     fn sec(&mut self, data: u8);
     fn sed(&mut self, data: u8);
     fn sei(&mut self, data: u8);
-    fn slo(&mut self, data: u8) -> u8;
     fn sta(&mut self) -> u8;
     fn stx(&mut self) -> u8;
     fn sty(&mut self) -> u8;
@@ -73,7 +67,7 @@ pub trait MOS6502Instructions {
     fn tya(&mut self, data: u8);
 }
 
-impl MOS6502Instructions for Mos6502 {
+impl Operations for Mos6502 {
     fn adc(&mut self, data: u8) {
         let (result, carry) = {
             let(a,b) = self.a.overflowing_add(data);
@@ -189,12 +183,6 @@ impl MOS6502Instructions for Mos6502 {
         self.p.set(Status::CARRY, self.y >= data);
     }
 
-    fn dcp(&mut self, data: u8) -> u8 {
-        let data = self.dec(data);
-        self.cmp(data);
-        data
-    }
-
     fn dec(&mut self, data: u8) -> u8 {
         let result = data.wrapping_add(0xff);
         self.set_zero_flag(result);
@@ -240,12 +228,6 @@ impl MOS6502Instructions for Mos6502 {
         self.set_negative_flag(self.y);
     }
 
-    fn isc(&mut self, data: u8) -> u8 {
-        let result = self.inc(data);
-        self.sbc(result);
-        result
-    }
-
     fn jmp(&mut self) {
         self.queue_read(Self::read_pc_increment, Self::set_address_low);
         self.queue_read(Self::read_pc, |cpu, data| {
@@ -282,13 +264,6 @@ impl MOS6502Instructions for Mos6502 {
             cpu.address.set_high(data);
             cpu.pc = cpu.address;
         });
-    }
-
-    fn lax(&mut self, data: u8) {
-        self.x = data;
-        self.a = data;
-        self.set_zero_flag(self.a);
-        self.set_negative_flag(self.a);
     }
 
     fn lda(&mut self, data: u8) {
@@ -347,12 +322,6 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::pop_stack, |cpu, data| cpu.p = Status::from_bits_truncate(data));
     }
 
-    fn rla(&mut self, data: u8) -> u8 {
-        let result = self.rol(data);
-        self.and(data);
-        result
-    } 
-
     fn rol(&mut self, data: u8) -> u8 {
         let (mut result, carry) = data.overflowing_shl(1);
         result += self.p.contains(Status::CARRY) as u8;
@@ -387,10 +356,6 @@ impl MOS6502Instructions for Mos6502 {
         self.queue_read(Self::read_pc_increment, Self::nop);
     }
 
-    fn sax(&mut self) -> u8 {
-        self.a & self.x
-    }
-
     fn sbc(&mut self, data: u8) {
         let (result, carry) = {
             let(a,b) = self.a.overflowing_sub(data);
@@ -415,12 +380,6 @@ impl MOS6502Instructions for Mos6502 {
 
     fn sei(&mut self, _: u8) {
         self.p.set(Status::INTERRUPT_DISABLE, true);
-    }
-
-    fn slo(&mut self, data: u8) -> u8 {
-        let result = self.asl(data);
-        self.ora(data);
-        result
     }
 
     fn sta(&mut self) -> u8 {
@@ -467,5 +426,65 @@ impl MOS6502Instructions for Mos6502 {
         self.a = self.y;
         self.set_zero_flag(self.a);
         self.set_negative_flag(self.a);
+    }
+}
+
+pub trait IllegalOperations {
+    fn dcp(&mut self, data: u8) -> u8;
+    fn isc(&mut self, data: u8) -> u8;
+    fn lax(&mut self, data: u8);
+    fn rla(&mut self, data: u8) -> u8;
+    fn sax(&mut self) -> u8;
+    fn slo(&mut self, data: u8) -> u8;
+    fn sre(&mut self, data: u8) -> u8;
+    fn rra(&mut self, data: u8) -> u8;
+}
+
+impl IllegalOperations for Mos6502 {
+    fn dcp(&mut self, data: u8) -> u8 {
+        let data = self.dec(data);
+        self.cmp(data);
+        data
+    }
+
+    fn isc(&mut self, data: u8) -> u8 {
+        let result = self.inc(data);
+        self.sbc(result);
+        result
+    }
+
+    fn lax(&mut self, data: u8) {
+        self.x = data;
+        self.a = data;
+        self.set_zero_flag(self.a);
+        self.set_negative_flag(self.a);
+    }
+
+    fn rla(&mut self, data: u8) -> u8 {
+        let result = self.rol(data);
+        self.and(data);
+        result
+    } 
+
+    fn sax(&mut self) -> u8 {
+        self.a & self.x
+    }
+
+    fn slo(&mut self, data: u8) -> u8 {
+        let result = self.asl(data);
+        self.ora(data);
+        result
+    }
+
+    fn sre(&mut self, data: u8) -> u8 {
+        let result = self.lsr(data);
+        self.eor(data);
+        result
+    }
+
+    fn rra(&mut self, data: u8) -> u8 {
+        let result = self.ror(data);
+        self.adc(data);
+        result
     }
 }

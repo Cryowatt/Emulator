@@ -8,7 +8,7 @@ use bitflags::bitflags;
 use crate::{roms::Mapper, address::Address};
 
 use self::{addressing_modes::*, instructions::{ReadOperation, WriteOperation, BranchOperation, ReadWriteOperation}};
-pub use self::{addressing_modes::{AddressingModes}, instructions::MOS6502Instructions};
+pub use self::{addressing_modes::{AddressingModes}, instructions::{Operations, IllegalOperations}};
 
 enum MicrocodeTask {
     Branch(BusRead, BranchOperation, Microcode<BusRead, BranchOperation>),
@@ -439,6 +439,7 @@ impl RP2A03 for Mos6502 {
             0x17 => (Self::slo as ReadWriteOperation).zero_page_indexed_x(self),
             0x1b => (Self::slo as ReadWriteOperation).absolute_indexed_y(self),
             0x1f => (Self::slo as ReadWriteOperation).absolute_indexed_x(self),
+
             0x23 => (Self::rla as ReadWriteOperation).indexed_indirect_x(self),
             0x27 => (Self::rla as ReadWriteOperation).zero_page(self),
             0x2f => (Self::rla as ReadWriteOperation).absolute(self),
@@ -446,6 +447,23 @@ impl RP2A03 for Mos6502 {
             0x37 => (Self::rla as ReadWriteOperation).zero_page_indexed_x(self),
             0x3b => (Self::rla as ReadWriteOperation).absolute_indexed_y(self),
             0x3f => (Self::rla as ReadWriteOperation).absolute_indexed_x(self),
+
+            0x43 => (Self::sre as ReadWriteOperation).indexed_indirect_x(self),
+            0x47 => (Self::sre as ReadWriteOperation).zero_page(self),
+            0x4f => (Self::sre as ReadWriteOperation).absolute(self),
+            0x53 => (Self::sre as ReadWriteOperation).indirect_indexed_y(self),
+            0x57 => (Self::sre as ReadWriteOperation).zero_page_indexed_x(self),
+            0x5b => (Self::sre as ReadWriteOperation).absolute_indexed_y(self),
+            0x5f => (Self::sre as ReadWriteOperation).absolute_indexed_x(self),
+
+            0x63 => (Self::rra as ReadWriteOperation).indexed_indirect_x(self),
+            0x67 => (Self::rra as ReadWriteOperation).zero_page(self),
+            0x6f => (Self::rra as ReadWriteOperation).absolute(self),
+            0x73 => (Self::rra as ReadWriteOperation).indirect_indexed_y(self),
+            0x77 => (Self::rra as ReadWriteOperation).zero_page_indexed_x(self),
+            0x7b => (Self::rra as ReadWriteOperation).absolute_indexed_y(self),
+            0x7f => (Self::rra as ReadWriteOperation).absolute_indexed_x(self),
+
             0x83 => (Self::sax as WriteOperation).indexed_indirect_x(self),
             0x87 => (Self::sax as WriteOperation).zero_page(self),
             0x8f => (Self::sax as WriteOperation).absolute(self),
