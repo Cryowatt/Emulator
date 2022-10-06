@@ -1,61 +1,139 @@
 use winit::{
     event::*,
     event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
+    window::{WindowBuilder, Window},
 };
-
-pub fn run() {
-    //env_logger::init();
-    let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
-
-    event_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            ref event,
-            window_id,
-        } if window_id == window.id() => match event {
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
-                        ..
-                    },
-                ..
-            } => *control_flow = ControlFlow::Exit,
-            _ => {}
-        },
-        _ => {println!("Message Looping")}
-    });
-}
 
 // Using https://github.com/jack1232/wgpu-step-by-step as example
 fn main() {
-    let instances = wgpu::Instance::new(wgpu::Backends::all());
-    for adapter in instances.enumerate_adapters(wgpu::Backends::all()) {
-        println!("{:?}", adapter.get_info())
-    }
 
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
-
-    window.set_title("Emulator");
+    let window = winit::window::Window::new(&event_loop).unwrap(); 
+    window.set_title("Some Shit Rust NES Emulator");
     env_logger::init();
+    pollster::block_on( run(event_loop, window));    
+}
 
-    event_loop.run(move |event, _, control_flow| {
+pub async fn run(event_loop: EventLoop<()>, window: Window) {
+    let size = window.inner_size();
+    let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
+    let surface = unsafe { instance.create_surface(&window) };
+    let adapter = instance
+        .request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            compatible_surface: Some(&surface),
+            force_fallback_adapter: false,
+        })
+        .await
+        .expect("Failed to find an appropriate adapter");
+
+    let (device, queue) = adapter
+        .request_device(
+            &wgpu::DeviceDescriptor {
+                label: None,
+                features: wgpu::Features::empty(),
+                limits: wgpu::Limits::default(),
+            },
+            None,
+        )
+        .await
+        .expect("Failed to create device");
+
+    let format = surface.get_supported_formats(&adapter)[0];
+    let mut config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format: format,
+        width: size.width,
+        height: size.height,
+        present_mode: wgpu::PresentMode::Mailbox,
+    };
+    surface.configure(&device, &config);
+
+    // Load the shaders from disk
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: None,
+        source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/shader.wgsl").into()),
+    });
+    
+    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: None,
+        bind_group_layouts: &[],
+        push_constant_ranges: &[],
+    });
+
+    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: None,
+        layout: Some(&pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &shader,
+            entry_point: "vs_main",
+            buffers: &[],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &shader,
+            entry_point: "fs_main",
+            targets: &[Some(wgpu::ColorTargetState {
+                format: format,
+                blend: Some(wgpu::BlendState {
+                    color: wgpu::BlendComponent::REPLACE,
+                    alpha: wgpu::BlendComponent::REPLACE,
+                }),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState{
+            topology: wgpu::PrimitiveTopology::TriangleStrip,
+            strip_index_format: Some(wgpu::IndexFormat::Uint32),
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview: None,
+    });
+
+    event_loop.run(move |event, _, control_flow| {       
+        let _ = (&instance, &adapter, &shader, &pipeline_layout);
         *control_flow = ControlFlow::Wait;
 
         match event {
             Event::WindowEvent {
+                event: WindowEvent::Resized(size),
+                ..
+            } => {
+                // Recreate the surface with the new size
+                config.width = size.width;
+                config.height = size.height;
+                surface.configure(&device, &config);
+            }
+            Event::RedrawRequested(_) => {
+                let frame = surface.get_current_texture().unwrap();                
+                let view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+                {
+                    let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: None,
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {r: 0.05, g:0.062, b:0.08, a:1.0}),
+                                store: true,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                    });
+                    rpass.set_pipeline(&render_pipeline);
+                    rpass.draw(0..4, 0..1);
+                }
+
+                queue.submit(Some(encoder.finish()));
+                frame.present();
+            }
+            Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
-                window_id,
-            } if window_id == window.id() => *control_flow = ControlFlow::Exit,
+                ..
+            } => *control_flow = ControlFlow::Exit,
             _ => {}
         }
     });
 }
-
-// fn main() {
-//     run();
-// }

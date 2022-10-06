@@ -20,5 +20,5 @@ num_enum="0.5.7"
 winit = "0.27.3"
 env_logger = "0.9"
 log = "0.4"
-wgpu = "0.13"
- 
+wgpu = "0.13" 
+pollster = "0.2"
